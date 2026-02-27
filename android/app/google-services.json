@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "772290278222",
+    "project_id": "tapguard-0",
+    "storage_bucket": "tapguard-0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:772290278222:android:c69af8c3d673247541641f",
+        "android_client_info": {
+          "package_name": "com.example.tapguard"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCW2eZVyyT3nB63PCJv2gbHdNPUSQbQj0M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
