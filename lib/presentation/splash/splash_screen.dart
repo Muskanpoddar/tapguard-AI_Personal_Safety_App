@@ -14,14 +14,13 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen>
     with TickerProviderStateMixin {
-
   // ── Animation Controllers ─────────────────────────────────────────────────
-  late AnimationController _logoController;       // logo scale-in
-  late AnimationController _pulseController;      // shield card pulse
-  late AnimationController _ringController;       // expanding NFC ring
-  late AnimationController _contentController;    // text fade + slide up
-  late AnimationController _loadBarController;    // bottom loading bar
-  late AnimationController _sparkleController;    // sparkle twinkle
+  late AnimationController _logoController;
+  late AnimationController _pulseController;
+  late AnimationController _ringController;
+  late AnimationController _contentController;
+  late AnimationController _loadBarController;
+  late AnimationController _sparkleController;
 
   // ── Animations ────────────────────────────────────────────────────────────
   late Animation<double> _logoScale;
@@ -34,6 +33,10 @@ class _SplashScreenState extends State<SplashScreen>
   late Animation<double> _loadBarWidth;
   late Animation<double> _sparkleOpacity;
   late Animation<double> _badgeOpacity;
+
+  // ── Tap to pause state ────────────────────────────────────────────────────
+  bool _isPaused = false;
+  Timer? _autoNavigateTimer;
 
   @override
   void initState() {
@@ -49,7 +52,6 @@ class _SplashScreenState extends State<SplashScreen>
     _startSequence();
   }
 
-  // ── Init all controllers ──────────────────────────────────────────────────
   void _initControllers() {
     _logoController = AnimationController(
       vsync: this,
@@ -82,9 +84,7 @@ class _SplashScreenState extends State<SplashScreen>
     )..repeat(reverse: true);
   }
 
-  // ── Init all animations ───────────────────────────────────────────────────
   void _initAnimations() {
-    // Logo bouncy scale-in
     _logoScale = CurvedAnimation(
       parent: _logoController,
       curve: Curves.elasticOut,
@@ -95,13 +95,11 @@ class _SplashScreenState extends State<SplashScreen>
       curve: const Interval(0.0, 0.5, curve: Curves.easeIn),
     ).drive(Tween(begin: 0.0, end: 1.0));
 
-    // Shield card breathing pulse (looping)
     _pulseScale = CurvedAnimation(
       parent: _pulseController,
       curve: Curves.easeInOut,
     ).drive(Tween(begin: 1.0, end: 1.06));
 
-    // Expanding NFC-style ripple ring
     _ringScale = CurvedAnimation(
       parent: _ringController,
       curve: Curves.easeOut,
@@ -112,7 +110,6 @@ class _SplashScreenState extends State<SplashScreen>
       curve: Curves.easeOut,
     ).drive(Tween(begin: 0.55, end: 0.0));
 
-    // Text content slide up + fade in
     _contentSlide = CurvedAnimation(
       parent: _contentController,
       curve: Curves.easeOutCubic,
@@ -123,54 +120,82 @@ class _SplashScreenState extends State<SplashScreen>
       curve: Curves.easeIn,
     ).drive(Tween(begin: 0.0, end: 1.0));
 
-    // Loading bar sweeps left → right
     _loadBarWidth = CurvedAnimation(
       parent: _loadBarController,
       curve: Curves.easeInOut,
     ).drive(Tween(begin: 0.0, end: 1.0));
 
-    // Sparkle twinkle (looping)
     _sparkleOpacity = CurvedAnimation(
       parent: _sparkleController,
       curve: Curves.easeInOut,
     ).drive(Tween(begin: 0.15, end: 0.85));
 
-    // Privacy badge fades in slightly after content
     _badgeOpacity = CurvedAnimation(
       parent: _contentController,
       curve: const Interval(0.4, 1.0, curve: Curves.easeIn),
     ).drive(Tween(begin: 0.0, end: 1.0));
   }
 
-  // ── Animation sequence ────────────────────────────────────────────────────
   void _startSequence() async {
     await Future.delayed(const Duration(milliseconds: 250));
     if (!mounted) return;
-
     _logoController.forward();
 
     await Future.delayed(const Duration(milliseconds: 450));
     if (!mounted) return;
-
     _contentController.forward();
     _loadBarController.forward();
 
-    // Navigate after splash duration
-    await Future.delayed(const Duration(milliseconds: 3000));
-    if (!mounted) return;
+    // Schedule auto-navigate after 3.5s
+    _scheduleAutoNavigate();
+  }
+
+  // ── Schedule auto navigate ─────────────────────────────────────────────
+  void _scheduleAutoNavigate() {
+    _autoNavigateTimer?.cancel();
+    _autoNavigateTimer = Timer(const Duration(milliseconds: 3500), () {
+      if (mounted && !_isPaused) {
+        _navigateNext();
+      }
+    });
+  }
+
+  // ── Tap handler: toggle pause ──────────────────────────────────────────
+  void _onTap() {
+    setState(() => _isPaused = !_isPaused);
+
+    if (_isPaused) {
+      // Pause everything
+      _autoNavigateTimer?.cancel();
+      _loadBarController.stop();
+      _pulseController.stop();
+      _ringController.stop();
+    } else {
+      // Resume everything
+      _loadBarController.forward();
+      _pulseController.repeat(reverse: true);
+      _ringController.repeat();
+      _scheduleAutoNavigate();
+    }
+
+    HapticFeedback.lightImpact();
+  }
+
+  // ── Long press: navigate immediately ─────────────────────────────────
+  void _onLongPress() {
+    HapticFeedback.mediumImpact();
     _navigateNext();
   }
 
   void _navigateNext() {
-    // TODO: check SharedPreferences → if onboarding done go to home, else onboarding
-    // final prefs = await SharedPreferences.getInstance();
-    // final done = prefs.getBool('onboarding_done') ?? false;
-    // Navigator.of(context).pushReplacementNamed(done ? AppRoutes.home : AppRoutes.onboarding);
+    _autoNavigateTimer?.cancel();
+    if (!mounted) return;
     Navigator.of(context).pushReplacementNamed(AppRoutes.onboarding);
   }
 
   @override
   void dispose() {
+    _autoNavigateTimer?.cancel();
     _logoController.dispose();
     _pulseController.dispose();
     _ringController.dispose();
@@ -185,49 +210,87 @@ class _SplashScreenState extends State<SplashScreen>
   // ══════════════════════════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-
     return Scaffold(
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: AppColors.splashGradient,
-            stops: [0.0, 0.4, 0.75, 1.0],
+      body: GestureDetector(
+        onTap: _onTap,
+        onLongPress: _onLongPress,
+        child: Container(
+          width: double.infinity,
+          height: double.infinity,
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: AppColors.splashGradient,
+              stops: [0.0, 0.4, 0.75, 1.0],
+            ),
           ),
-        ),
-        child: Stack(
-          children: [
-            // Layer 1: Static concentric bg rings
-            const _BackgroundRings(),
+          child: Stack(
+            children: [
+              // Layer 1: Static bg rings
+              const _BackgroundRings(),
 
-            // Layer 2: Expanding NFC ripple
-            _buildNfcRipple(),
+              // Layer 2: NFC ripple ring
+              _buildNfcRipple(),
 
-            // Layer 3: Sparkle dots
-            _buildSparkles(),
+              // Layer 3: Sparkles
+              _buildSparkles(),
 
-            // Layer 4: Logo + App name + Tagline
-            _buildCenterContent(),
+              // Layer 4: Center content
+              _buildCenterContent(),
 
-            // Layer 5: Privacy badge
-            _buildPrivacyBadge(),
+              // Layer 5: Pause indicator (shows when paused)
+              if (_isPaused) _buildPauseIndicator(),
 
-            // Layer 6: Page indicator dots
-            _buildPageDots(),
+              // Layer 6: Privacy badge
+              _buildPrivacyBadge(),
 
-            // Layer 7: Bottom loading bar
-            _buildLoadingBar(),
-          ],
+              // Layer 7: Page dots
+              _buildPageDots(),
+
+              // Layer 8: Loading bar
+              _buildLoadingBar(),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  // ── NFC-style expanding ripple ─────────────────────────────────────────────
+  // ── Pause indicator overlay ───────────────────────────────────────────────
+  Widget _buildPauseIndicator() {
+    return Positioned(
+      top: 60,
+      left: 0,
+      right: 0,
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.30),
+            borderRadius: BorderRadius.circular(50),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.pause_rounded, color: Colors.white, size: 14),
+              const SizedBox(width: 6),
+              Text(
+                'Paused — tap to continue',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.white.withOpacity(0.9),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildNfcRipple() {
     return Center(
       child: AnimatedBuilder(
@@ -250,7 +313,6 @@ class _SplashScreenState extends State<SplashScreen>
     );
   }
 
-  // ── Center: Logo card + name + tagline ────────────────────────────────────
   Widget _buildCenterContent() {
     return Center(
       child: AnimatedBuilder(
@@ -262,8 +324,7 @@ class _SplashScreenState extends State<SplashScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-
-            // Logo card with combined scale animations
+            // Shield logo
             AnimatedBuilder(
               animation: Listenable.merge([_logoController, _pulseController]),
               builder: (_, child) => Transform.scale(
@@ -275,7 +336,6 @@ class _SplashScreenState extends State<SplashScreen>
 
             const SizedBox(height: 28),
 
-            // TapGuard
             const Text(
               AppStrings.appName,
               style: TextStyle(
@@ -290,7 +350,6 @@ class _SplashScreenState extends State<SplashScreen>
 
             const SizedBox(height: 10),
 
-            // Safety at your fingertips
             Text(
               AppStrings.appTagline,
               style: TextStyle(
@@ -301,13 +360,25 @@ class _SplashScreenState extends State<SplashScreen>
                 letterSpacing: 0.3,
               ),
             ),
+
+            const SizedBox(height: 20),
+
+            // Tap hint text
+            Text(
+              _isPaused ? 'Tap to resume' : 'Tap to pause',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 11,
+                color: Colors.white.withOpacity(0.45),
+                letterSpacing: 0.5,
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  // ── Privacy badge at bottom ────────────────────────────────────────────────
   Widget _buildPrivacyBadge() {
     return Positioned(
       bottom: 60,
@@ -319,8 +390,7 @@ class _SplashScreenState extends State<SplashScreen>
             Opacity(opacity: _badgeOpacity.value, child: child),
         child: Center(
           child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.14),
               borderRadius: BorderRadius.circular(50),
@@ -356,7 +426,6 @@ class _SplashScreenState extends State<SplashScreen>
     );
   }
 
-  // ── Page indicator dots ───────────────────────────────────────────────────
   Widget _buildPageDots() {
     return const Positioned(
       bottom: 24,
@@ -375,7 +444,6 @@ class _SplashScreenState extends State<SplashScreen>
     );
   }
 
-  // ── Bottom loading bar ────────────────────────────────────────────────────
   Widget _buildLoadingBar() {
     return Positioned(
       bottom: 0,
@@ -401,18 +469,47 @@ class _SplashScreenState extends State<SplashScreen>
     );
   }
 
-  // ── Sparkle dots ──────────────────────────────────────────────────────────
   Widget _buildSparkles() {
     return AnimatedBuilder(
       animation: _sparkleController,
       builder: (_, __) => Stack(
         children: [
-          _Sparkle(top: 130,    right: 60,  size: 8, opacity: _sparkleOpacity.value),
-          _Sparkle(top: 210,    right: 100, size: 5, opacity: _sparkleOpacity.value * 0.65),
-          _Sparkle(top: 105,    left: 55,   size: 6, opacity: _sparkleOpacity.value * 0.80),
-          _Sparkle(top: 320,    left: 72,   size: 4, opacity: _sparkleOpacity.value * 0.50),
-          _Sparkle(bottom: 220, right: 50,  size: 5, opacity: _sparkleOpacity.value * 0.60),
-          _Sparkle(bottom: 170, left: 80,   size: 7, opacity: _sparkleOpacity.value * 0.90),
+          _Sparkle(
+            top: 130,
+            right: 60,
+            size: 8,
+            opacity: _sparkleOpacity.value,
+          ),
+          _Sparkle(
+            top: 210,
+            right: 100,
+            size: 5,
+            opacity: _sparkleOpacity.value * 0.65,
+          ),
+          _Sparkle(
+            top: 105,
+            left: 55,
+            size: 6,
+            opacity: _sparkleOpacity.value * 0.80,
+          ),
+          _Sparkle(
+            top: 320,
+            left: 72,
+            size: 4,
+            opacity: _sparkleOpacity.value * 0.50,
+          ),
+          _Sparkle(
+            bottom: 220,
+            right: 50,
+            size: 5,
+            opacity: _sparkleOpacity.value * 0.60,
+          ),
+          _Sparkle(
+            bottom: 170,
+            left: 80,
+            size: 7,
+            opacity: _sparkleOpacity.value * 0.90,
+          ),
         ],
       ),
     );
@@ -420,10 +517,9 @@ class _SplashScreenState extends State<SplashScreen>
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-//  Private Widgets
+//  Private Sub-Widgets
 // ══════════════════════════════════════════════════════════════════════════════
 
-/// Frosted-glass logo card with shield icon inside
 class _LogoCard extends StatelessWidget {
   const _LogoCard();
 
@@ -435,10 +531,7 @@ class _LogoCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.16),
         borderRadius: BorderRadius.circular(32),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.25),
-          width: 1,
-        ),
+        border: Border.all(color: Colors.white.withOpacity(0.25), width: 1),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.20),
@@ -452,14 +545,11 @@ class _LogoCard extends StatelessWidget {
           ),
         ],
       ),
-      child: const Center(
-        child: _ShieldIcon(size: 62),
-      ),
+      child: const Center(child: _ShieldIcon(size: 62)),
     );
   }
 }
 
-/// Custom shield with person icon — drawn with CustomPainter
 class _ShieldIcon extends StatelessWidget {
   final double size;
   const _ShieldIcon({required this.size});
@@ -480,49 +570,45 @@ class _ShieldPainter extends CustomPainter {
     final w = size.width;
     final h = size.height;
 
-    // ── Shield body ────────────────────────────────────────────────────────
-    final shieldPaint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.fill;
+    canvas.drawPath(
+      Path()
+        ..moveTo(w * 0.50, h * 0.04)
+        ..lineTo(w * 0.10, h * 0.20)
+        ..lineTo(w * 0.10, h * 0.52)
+        ..cubicTo(w * 0.10, h * 0.76, w * 0.32, h * 0.92, w * 0.50, h * 0.97)
+        ..cubicTo(w * 0.68, h * 0.92, w * 0.90, h * 0.76, w * 0.90, h * 0.52)
+        ..lineTo(w * 0.90, h * 0.20)
+        ..close(),
+      Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.fill,
+    );
 
-    final shieldPath = Path()
-      ..moveTo(w * 0.50, h * 0.04)
-      ..lineTo(w * 0.10, h * 0.20)
-      ..lineTo(w * 0.10, h * 0.52)
-      ..cubicTo(w * 0.10, h * 0.76, w * 0.32, h * 0.92, w * 0.50, h * 0.97)
-      ..cubicTo(w * 0.68, h * 0.92, w * 0.90, h * 0.76, w * 0.90, h * 0.52)
-      ..lineTo(w * 0.90, h * 0.20)
-      ..close();
+    canvas.drawCircle(
+      Offset(w * 0.50, h * 0.37),
+      w * 0.115,
+      Paint()
+        ..color = const Color(0xFF7C4DFF)
+        ..style = PaintingStyle.fill,
+    );
 
-    canvas.drawPath(shieldPath, shieldPaint);
-
-    // ── Person head ────────────────────────────────────────────────────────
-    final personPaint = Paint()
-      ..color = const Color(0xFF7C4DFF)
-      ..style = PaintingStyle.fill;
-
-    canvas.drawCircle(Offset(w * 0.50, h * 0.37), w * 0.115, personPaint);
-
-    // ── Person body arc ────────────────────────────────────────────────────
-    final bodyPaint = Paint()
-      ..color = const Color(0xFF7C4DFF)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = w * 0.07
-      ..strokeCap = StrokeCap.round;
-
-    final bodyPath = Path()
-      ..moveTo(w * 0.22, h * 0.72)
-      ..quadraticBezierTo(w * 0.22, h * 0.56, w * 0.50, h * 0.56)
-      ..quadraticBezierTo(w * 0.78, h * 0.56, w * 0.78, h * 0.72);
-
-    canvas.drawPath(bodyPath, bodyPaint);
+    canvas.drawPath(
+      Path()
+        ..moveTo(w * 0.22, h * 0.72)
+        ..quadraticBezierTo(w * 0.22, h * 0.56, w * 0.50, h * 0.56)
+        ..quadraticBezierTo(w * 0.78, h * 0.56, w * 0.78, h * 0.72),
+      Paint()
+        ..color = const Color(0xFF7C4DFF)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = w * 0.07
+        ..strokeCap = StrokeCap.round,
+    );
   }
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-/// Three concentric static rings in the background
 class _BackgroundRings extends StatelessWidget {
   const _BackgroundRings();
 
@@ -553,26 +639,19 @@ class _BackgroundRings extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(
-          color: Colors.white.withOpacity(opacity),
-          width: 1,
-        ),
+        border: Border.all(color: Colors.white.withOpacity(opacity), width: 1),
       ),
     );
   }
 }
 
-/// Single ambient sparkle dot
 class _Sparkle extends StatelessWidget {
-  final double? top;
-  final double? bottom;
-  final double? left;
-  final double? right;
-  final double size;
-  final double opacity;
-
+  final double? top, bottom, left, right, size, opacity;
   const _Sparkle({
-    this.top, this.bottom, this.left, this.right,
+    this.top,
+    this.bottom,
+    this.left,
+    this.right,
     required this.size,
     required this.opacity,
   });
@@ -580,20 +659,22 @@ class _Sparkle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Positioned(
-      top: top, bottom: bottom, left: left, right: right,
+      top: top,
+      bottom: bottom,
+      left: left,
+      right: right,
       child: Container(
         width: size,
         height: size,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: Colors.white.withOpacity(opacity),
+          color: Colors.white.withOpacity(opacity!),
         ),
       ),
     );
   }
 }
 
-/// Animated page indicator dot
 class _PageDot extends StatelessWidget {
   final bool active;
   const _PageDot({required this.active});
