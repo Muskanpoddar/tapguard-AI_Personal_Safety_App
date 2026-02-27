@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/routes/app_routes.dart';
 import 'core/theme/app_theme.dart';
-import 'presentation/splash/splash_screen.dart';
 
 class TapGuardApp extends ConsumerWidget {
   const TapGuardApp({super.key});
@@ -12,15 +11,12 @@ class TapGuardApp extends ConsumerWidget {
     return MaterialApp(
       title: 'TapGuard',
       debugShowCheckedModeBanner: false,
-
-      // App theme
       theme: AppTheme.lightTheme,
 
-      // Named routes
+      // ── Use initialRoute + onGenerateRoute (NOT home:) ─────────────────
+      // home: removed intentionally — it bypasses onGenerateRoute
+      initialRoute: AppRoutes.splash,
       onGenerateRoute: AppRoutes.onGenerateRoute,
-
-      // Start at splash
-      home: const SplashScreen(),
     );
   }
 }
