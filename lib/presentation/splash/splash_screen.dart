@@ -34,8 +34,8 @@ class _SplashScreenState extends State<SplashScreen>
   late Animation<double> _sparkleOpacity;
   late Animation<double> _badgeOpacity;
 
-  // ── Tap to pause state ────────────────────────────────────────────────────
-  bool _isPaused = false;
+  // ── Hold-to-freeze state ──────────────────────────────────────────────────
+  bool _isHolding = false;
   Timer? _autoNavigateTimer;
 
   @override
@@ -52,6 +52,7 @@ class _SplashScreenState extends State<SplashScreen>
     _startSequence();
   }
 
+  // ── Init controllers ──────────────────────────────────────────────────────
   void _initControllers() {
     _logoController = AnimationController(
       vsync: this,
@@ -75,7 +76,7 @@ class _SplashScreenState extends State<SplashScreen>
 
     _loadBarController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2600),
+      duration: const Duration(milliseconds: 2800),
     );
 
     _sparkleController = AnimationController(
@@ -84,6 +85,7 @@ class _SplashScreenState extends State<SplashScreen>
     )..repeat(reverse: true);
   }
 
+  // ── Init animations ───────────────────────────────────────────────────────
   void _initAnimations() {
     _logoScale = CurvedAnimation(
       parent: _logoController,
@@ -136,61 +138,83 @@ class _SplashScreenState extends State<SplashScreen>
     ).drive(Tween(begin: 0.0, end: 1.0));
   }
 
+  // ── Start entrance sequence ───────────────────────────────────────────────
   void _startSequence() async {
     await Future.delayed(const Duration(milliseconds: 250));
     if (!mounted) return;
+
     _logoController.forward();
 
     await Future.delayed(const Duration(milliseconds: 450));
     if (!mounted) return;
+
     _contentController.forward();
     _loadBarController.forward();
 
-    // Schedule auto-navigate after 3.5s
-    _scheduleAutoNavigate();
-  }
-
-  // ── Schedule auto navigate ─────────────────────────────────────────────
-  void _scheduleAutoNavigate() {
-    _autoNavigateTimer?.cancel();
-    _autoNavigateTimer = Timer(const Duration(milliseconds: 3500), () {
-      if (mounted && !_isPaused) {
-        _navigateNext();
+    // Listen for load bar completion → then navigate if not holding
+    _loadBarController.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        _tryNavigate();
       }
     });
   }
 
-  // ── Tap handler: toggle pause ──────────────────────────────────────────
-  void _onTap() {
-    setState(() => _isPaused = !_isPaused);
-
-    if (_isPaused) {
-      // Pause everything
-      _autoNavigateTimer?.cancel();
-      _loadBarController.stop();
-      _pulseController.stop();
-      _ringController.stop();
-    } else {
-      // Resume everything
-      _loadBarController.forward();
-      _pulseController.repeat(reverse: true);
-      _ringController.repeat();
-      _scheduleAutoNavigate();
+  // ── Try navigate — only if finger is NOT on screen ───────────────────────
+  void _tryNavigate() {
+    if (_isHolding) {
+      // Finger still on screen — wait for finger lift (handled in onPointerUp)
+      return;
     }
-
-    HapticFeedback.lightImpact();
+    _navigateToOnboarding();
   }
 
-  // ── Long press: navigate immediately ─────────────────────────────────
-  void _onLongPress() {
-    HapticFeedback.mediumImpact();
-    _navigateNext();
-  }
-
-  void _navigateNext() {
+  void _navigateToOnboarding() {
     _autoNavigateTimer?.cancel();
     if (!mounted) return;
     Navigator.of(context).pushReplacementNamed(AppRoutes.onboarding);
+  }
+
+  // ── Finger DOWN — freeze everything ──────────────────────────────────────
+  void _onPointerDown(PointerDownEvent event) {
+    HapticFeedback.lightImpact();
+    setState(() => _isHolding = true);
+
+    // Stop all animations
+    _loadBarController.stop();
+    _pulseController.stop();
+    _ringController.stop();
+    _autoNavigateTimer?.cancel();
+  }
+
+  // ── Finger UP — resume everything ────────────────────────────────────────
+  void _onPointerUp(PointerUpEvent event) {
+    setState(() => _isHolding = false);
+
+    // Resume all animations
+    _pulseController.repeat(reverse: true);
+    _ringController.repeat();
+
+    // If load bar was already complete, navigate immediately
+    if (_loadBarController.value >= 1.0) {
+      // Small delay so user sees the resume
+      _autoNavigateTimer = Timer(
+        const Duration(milliseconds: 300),
+        _navigateToOnboarding,
+      );
+    } else {
+      // Resume load bar from where it stopped
+      _loadBarController.forward();
+    }
+  }
+
+  // ── Finger leaves screen (cancel) ────────────────────────────────────────
+  void _onPointerCancel(PointerCancelEvent event) {
+    if (_isHolding) {
+      setState(() => _isHolding = false);
+      _pulseController.repeat(reverse: true);
+      _ringController.repeat();
+      _loadBarController.forward();
+    }
   }
 
   @override
@@ -211,9 +235,12 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: GestureDetector(
-        onTap: _onTap,
-        onLongPress: _onLongPress,
+      body: Listener(
+        // Using Listener (not GestureDetector) so we get
+        // exact pointer down/up events without gesture competition
+        onPointerDown: _onPointerDown,
+        onPointerUp: _onPointerUp,
+        onPointerCancel: _onPointerCancel,
         child: Container(
           width: double.infinity,
           height: double.infinity,
@@ -239,16 +266,13 @@ class _SplashScreenState extends State<SplashScreen>
               // Layer 4: Center content
               _buildCenterContent(),
 
-              // Layer 5: Pause indicator (shows when paused)
-              if (_isPaused) _buildPauseIndicator(),
-
-              // Layer 6: Privacy badge
+              // Layer 5: Privacy badge
               _buildPrivacyBadge(),
 
-              // Layer 7: Page dots
+              // Layer 6: Page dots
               _buildPageDots(),
 
-              // Layer 8: Loading bar
+              // Layer 7: Loading bar
               _buildLoadingBar(),
             ],
           ),
@@ -257,40 +281,7 @@ class _SplashScreenState extends State<SplashScreen>
     );
   }
 
-  // ── Pause indicator overlay ───────────────────────────────────────────────
-  Widget _buildPauseIndicator() {
-    return Positioned(
-      top: 60,
-      left: 0,
-      right: 0,
-      child: Center(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.30),
-            borderRadius: BorderRadius.circular(50),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.pause_rounded, color: Colors.white, size: 14),
-              const SizedBox(width: 6),
-              Text(
-                'Paused — tap to continue',
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.white.withOpacity(0.9),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
+  // ── NFC ripple ────────────────────────────────────────────────────────────
   Widget _buildNfcRipple() {
     return Center(
       child: AnimatedBuilder(
@@ -313,6 +304,7 @@ class _SplashScreenState extends State<SplashScreen>
     );
   }
 
+  // ── Center: logo + name + tagline ─────────────────────────────────────────
   Widget _buildCenterContent() {
     return Center(
       child: AnimatedBuilder(
@@ -324,7 +316,7 @@ class _SplashScreenState extends State<SplashScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Shield logo
+            // Logo card
             AnimatedBuilder(
               animation: Listenable.merge([_logoController, _pulseController]),
               builder: (_, child) => Transform.scale(
@@ -336,6 +328,7 @@ class _SplashScreenState extends State<SplashScreen>
 
             const SizedBox(height: 28),
 
+            // App name
             const Text(
               AppStrings.appName,
               style: TextStyle(
@@ -350,6 +343,7 @@ class _SplashScreenState extends State<SplashScreen>
 
             const SizedBox(height: 10),
 
+            // Tagline
             Text(
               AppStrings.appTagline,
               style: TextStyle(
@@ -360,25 +354,13 @@ class _SplashScreenState extends State<SplashScreen>
                 letterSpacing: 0.3,
               ),
             ),
-
-            const SizedBox(height: 20),
-
-            // Tap hint text
-            Text(
-              _isPaused ? 'Tap to resume' : 'Tap to pause',
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 11,
-                color: Colors.white.withOpacity(0.45),
-                letterSpacing: 0.5,
-              ),
-            ),
           ],
         ),
       ),
     );
   }
 
+  // ── Privacy badge ─────────────────────────────────────────────────────────
   Widget _buildPrivacyBadge() {
     return Positioned(
       bottom: 60,
@@ -426,6 +408,7 @@ class _SplashScreenState extends State<SplashScreen>
     );
   }
 
+  // ── Page dots ─────────────────────────────────────────────────────────────
   Widget _buildPageDots() {
     return const Positioned(
       bottom: 24,
@@ -444,6 +427,7 @@ class _SplashScreenState extends State<SplashScreen>
     );
   }
 
+  // ── Loading bar ───────────────────────────────────────────────────────────
   Widget _buildLoadingBar() {
     return Positioned(
       bottom: 0,
@@ -469,6 +453,7 @@ class _SplashScreenState extends State<SplashScreen>
     );
   }
 
+  // ── Sparkles ──────────────────────────────────────────────────────────────
   Widget _buildSparkles() {
     return AnimatedBuilder(
       animation: _sparkleController,
@@ -517,7 +502,7 @@ class _SplashScreenState extends State<SplashScreen>
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-//  Private Sub-Widgets
+//  Private Sub-Widgets (unchanged from before)
 // ══════════════════════════════════════════════════════════════════════════════
 
 class _LogoCard extends StatelessWidget {
@@ -570,6 +555,7 @@ class _ShieldPainter extends CustomPainter {
     final w = size.width;
     final h = size.height;
 
+    // Shield body
     canvas.drawPath(
       Path()
         ..moveTo(w * 0.50, h * 0.04)
@@ -584,6 +570,7 @@ class _ShieldPainter extends CustomPainter {
         ..style = PaintingStyle.fill,
     );
 
+    // Person head
     canvas.drawCircle(
       Offset(w * 0.50, h * 0.37),
       w * 0.115,
@@ -592,6 +579,7 @@ class _ShieldPainter extends CustomPainter {
         ..style = PaintingStyle.fill,
     );
 
+    // Person body arc
     canvas.drawPath(
       Path()
         ..moveTo(w * 0.22, h * 0.72)
