@@ -30,7 +30,6 @@ import '../../presentation/sos/sos_screen.dart';
 import '../../presentation/geofence/geofence_setup_screen.dart';
 
 // Safety Status
-import '../../presentation/safety_status/safety_status_screen.dart';
 
 // History
 import '../../presentation/history/session_history_screen.dart';
@@ -42,7 +41,6 @@ import '../../presentation/profile/profile_screen.dart';
 import '../../presentation/privacy/privacy_permissions_screen.dart';
 
 // Settings
-import '../../presentation/settings/settings_screen.dart';
 
 class AppRoutes {
   // ── Route name constants ──────────────────────────────────────────────────
