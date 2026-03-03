@@ -19,6 +19,9 @@ dependencies:
   nfc_manager: ^4.1.1
   permission_handler: ^12.0.0
   shake: ^3.0.0
+  share_plus: ^12.0.0
+  shared_preferences: ^2.3.0
+  ndef_record: ^1.4.0
 
 dev_dependencies:
   flutter_test:
