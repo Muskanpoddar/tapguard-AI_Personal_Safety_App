@@ -41,30 +41,33 @@ import '../../presentation/profile/profile_screen.dart';
 import '../../presentation/privacy/privacy_permissions_screen.dart';
 
 // Settings
+import '../../presentation/settings/settings_screen.dart';
+
+// Safety Status
+import '../../presentation/safety_status/safety_status_screen.dart';
 
 class AppRoutes {
   // ── Route name constants ──────────────────────────────────────────────────
-  static const String splash         = '/';
-  static const String onboarding     = '/onboarding';
-  static const String login          = '/login';
-  static const String otp            = '/otp';
-  static const String profileSetup   = '/profile-setup';
-  static const String home           = '/home';
-  static const String nfcPairing     = '/nfc-pairing';
-  static const String activeSession  = '/active-session';
-  static const String liveMap        = '/live-map';
-  static const String sos            = '/sos';
-  static const String geofenceSetup  = '/geofence-setup';
-  static const String safetyStatus   = '/safety-status';
+  static const String splash = '/';
+  static const String onboarding = '/onboarding';
+  static const String login = '/login';
+  static const String otp = '/otp';
+  static const String profileSetup = '/profile-setup';
+  static const String home = '/home';
+  static const String nfcPairing = '/nfc-pairing';
+  static const String activeSession = '/active-session';
+  static const String liveMap = '/live-map';
+  static const String sos = '/sos';
+  static const String geofenceSetup = '/geofence-setup';
+  static const String safetyStatus = '/safety-status';
   static const String sessionHistory = '/session-history';
-  static const String profile        = '/profile';
-  static const String privacy        = '/privacy';
-  static const String settings       = '/settings';
+  static const String profile = '/profile';
+  static const String privacy = '/privacy';
+  static const String settings = '/settings';
 
   // ── Route generator ───────────────────────────────────────────────────────
   static Route<dynamic> onGenerateRoute(RouteSettings routeSettings) {
     switch (routeSettings.name) {
-
       case splash:
         return _slide(const SplashScreen(), routeSettings);
 
@@ -75,8 +78,18 @@ class AppRoutes {
         return _slide(const LoginScreen(), routeSettings);
 
       case otp:
-        final phone = routeSettings.arguments as String? ?? '';
-        return _slide(OtpScreen(phoneNumber: phone), routeSettings);
+        final args = routeSettings.arguments as Map<String, String>? ?? {};
+        return _slide(
+          OtpScreen(
+            phoneNumber: args['phone'] ?? '',
+            verificationId: args['verificationId'] ?? '',
+            resendToken:
+                args['resendToken'] != null && args['resendToken']!.isNotEmpty
+                ? int.tryParse(args['resendToken']!)
+                : null,
+          ),
+          routeSettings,
+        );
 
       case profileSetup:
         return _slide(const ProfileSetupScreen(), routeSettings);
@@ -100,7 +113,7 @@ class AppRoutes {
         return _slide(const GeofenceSetupScreen(), routeSettings);
 
       case safetyStatus:
-        return _slide(const SafetyStatusScreen() as Widget, routeSettings);
+        return _slide(const SafetyStatusScreen(), routeSettings);
 
       case sessionHistory:
         return _slide(const SessionHistoryScreen(), routeSettings);
@@ -112,7 +125,7 @@ class AppRoutes {
         return _slide(const PrivacyPermissionsScreen(), routeSettings);
 
       case settings:
-        return _slide(const SettingsScreen() as Widget, routeSettings);
+        return _slide(const SettingsScreen(), routeSettings);
 
       // ── 404 fallback ──────────────────────────────────────────────────────
       default:
@@ -147,20 +160,9 @@ class AppRoutes {
           end: Offset.zero,
         ).chain(CurveTween(curve: Curves.easeOutCubic));
 
-        return SlideTransition(
-          position: animation.drive(tween),
-          child: child,
-        );
+        return SlideTransition(position: animation.drive(tween), child: child);
       },
       transitionDuration: const Duration(milliseconds: 350),
     );
   }
-}
-
-class SettingsScreen {
-  const SettingsScreen();
-}
-
-class SafetyStatusScreen {
-  const SafetyStatusScreen();
 }
