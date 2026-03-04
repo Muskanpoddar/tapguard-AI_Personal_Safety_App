@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/routes/app_routes.dart';
+import '../../data/repositories/auth_repository.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  LOGIN SCREEN
@@ -23,6 +24,8 @@ class _LoginScreenState extends State<LoginScreen>
   String _selectedFlag = '🇺🇸';
   bool _isLoading = false;
   bool _phoneValid = false;
+
+  final _authRepo = AuthRepository();
 
   // Entrance animation
   late AnimationController _enterController;
@@ -86,7 +89,7 @@ class _LoginScreenState extends State<LoginScreen>
 
   // ── Send OTP ──────────────────────────────────────────────────────────────
   Future<void> _sendOtp() async {
-    if (!_phoneValid) return;
+    if (!_phoneValid || _isLoading) return;
 
     FocusScope.of(context).unfocus();
     HapticFeedback.mediumImpact();
@@ -94,33 +97,31 @@ class _LoginScreenState extends State<LoginScreen>
 
     final fullPhone = '$_selectedCountryCode${_phoneController.text.trim()}';
 
-    // TODO: Replace this block with Firebase Phone Auth:
-    // await FirebaseAuth.instance.verifyPhoneNumber(
-    //   phoneNumber: fullPhone,
-    //   verificationCompleted: (PhoneAuthCredential credential) async {
-    //     await FirebaseAuth.instance.signInWithCredential(credential);
-    //     Navigator.of(context).pushReplacementNamed(AppRoutes.home);
-    //   },
-    //   verificationFailed: (FirebaseAuthException e) {
-    //     setState(() => _isLoading = false);
-    //     _showError(e.message ?? 'Verification failed');
-    //   },
-    //   codeSent: (String verificationId, int? resendToken) {
-    //     setState(() => _isLoading = false);
-    //     Navigator.of(context).pushNamed(
-    //       AppRoutes.otp,
-    //       arguments: {'phone': fullPhone, 'verificationId': verificationId},
-    //     );
-    //   },
-    //   codeAutoRetrievalTimeout: (String verificationId) {},
-    // );
-
-    // Simulate OTP send for now
-    await Future.delayed(const Duration(seconds: 2));
-    if (!mounted) return;
-
-    setState(() => _isLoading = false);
-    Navigator.of(context).pushNamed(AppRoutes.otp, arguments: fullPhone);
+    await _authRepo.sendOtp(
+      fullPhone,
+      onCodeSent: (String verificationId, int? resendToken) {
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+        Navigator.of(context).pushNamed(
+          AppRoutes.otp,
+          arguments: {
+            'phone': fullPhone,
+            'verificationId': verificationId,
+            'resendToken': resendToken?.toString() ?? '',
+          },
+        );
+      },
+      onAutoVerified: () {
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+        Navigator.of(context).pushReplacementNamed(AppRoutes.home);
+      },
+      onError: (String msg) {
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+        _showError(msg);
+      },
+    );
   }
 
   void _showError(String msg) {
