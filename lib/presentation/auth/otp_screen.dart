@@ -1,13 +1,9 @@
 // lib/presentation/auth/otp_screen.dart
 //
-// OTP Verification Screen – fully responsive, no overflow
-//  • LayoutBuilder-based boxes (fit any screen width)
-//  • 8 dp gap between every box
-//  • Staggered fade-in per section
-//  • Shake on wrong code
-//  • 60 s countdown resend
-//  • Backspace navigates back, paste spreads
-//  • Real Firebase Phone Auth
+// OTP Verification Screen – email-based OTP (free SMTP)
+//  • 6-box digit entry, paste support, backspace navigation
+//  • Staggered fade-in, shake on wrong code
+//  • 60 s countdown resend via EmailOtpService
 
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -15,19 +11,12 @@ import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/routes/app_routes.dart';
-import '../../data/repositories/auth_repository.dart';
+import '../../data/services/email_otp_service.dart';
 
 class OtpScreen extends StatefulWidget {
-  final String phoneNumber;
-  final String verificationId;
-  final int? resendToken;
+  final String email;
 
-  const OtpScreen({
-    super.key,
-    required this.phoneNumber,
-    required this.verificationId,
-    this.resendToken,
-  });
+  const OtpScreen({super.key, required this.email});
 
   @override
   State<OtpScreen> createState() => _OtpScreenState();
@@ -52,12 +41,6 @@ class _OtpScreenState extends State<OtpScreen> with TickerProviderStateMixin {
   int _secs = _tick;
   Timer? _timer;
 
-  // mutable copies so resend can update them
-  late String _verificationId;
-  int? _resendToken;
-
-  final _authRepo = AuthRepository();
-
   // ── animations ────────────────────────────────────────────────────────────
   late List<AnimationController> _stagger;
   late List<Animation<double>> _stFade;
@@ -76,8 +59,6 @@ class _OtpScreenState extends State<OtpScreen> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    _verificationId = widget.verificationId;
-    _resendToken = widget.resendToken;
     _initAnimations();
     _startTimer();
     for (final c in _ctrl) {
@@ -210,20 +191,21 @@ class _OtpScreenState extends State<OtpScreen> with TickerProviderStateMixin {
     HapticFeedback.mediumImpact();
     setState(() => _loading = true);
 
+    final valid = EmailOtpService.verifyOtp(widget.email, _code);
+
+    if (!valid) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      _snack('Wrong code. Please check and try again.', error: true);
+      _shake();
+      return;
+    }
+
+    // OTP correct — create an anonymous Firebase session so auth state works
     try {
-      await _authRepo.verifyOtp(_verificationId, _code);
-    } on FirebaseAuthException catch (e) {
-      if (!mounted) return;
-      setState(() => _loading = false);
-      _snack(AuthRepository.friendlyMessage(e), error: true);
-      _shake();
-      return;
+      await FirebaseAuth.instance.signInAnonymously();
     } catch (_) {
-      if (!mounted) return;
-      setState(() => _loading = false);
-      _snack('Verification failed. Please try again.', error: true);
-      _shake();
-      return;
+      // Non-fatal: continue even if anonymous auth fails
     }
 
     if (!mounted) return;
@@ -243,22 +225,13 @@ class _OtpScreenState extends State<OtpScreen> with TickerProviderStateMixin {
     HapticFeedback.lightImpact();
     _startTimer();
 
-    await _authRepo.resendOtp(
-      widget.phoneNumber,
-      resendToken: _resendToken,
-      onCodeSent: (String newVerificationId, int? newToken) {
-        if (!mounted) return;
-        setState(() {
-          _verificationId = newVerificationId;
-          _resendToken = newToken;
-        });
-        _snack('New code sent to ${widget.phoneNumber}', error: false);
-      },
-      onError: (String msg) {
-        if (!mounted) return;
-        _snack(msg, error: true);
-      },
-    );
+    final error = await EmailOtpService.sendOtp(widget.email);
+    if (!mounted) return;
+    if (error != null) {
+      _snack(error, error: true);
+    } else {
+      _snack('New code sent to ${widget.email}', error: false);
+    }
   }
 
   void _snack(String msg, {required bool error}) =>
@@ -353,7 +326,11 @@ class _OtpScreenState extends State<OtpScreen> with TickerProviderStateMixin {
         color: AppColors.primary.withOpacity(0.1),
         shape: BoxShape.circle,
       ),
-      child: const Icon(Icons.sms_rounded, size: 38, color: AppColors.primary),
+      child: const Icon(
+        Icons.mark_email_unread_rounded,
+        size: 38,
+        color: AppColors.primary,
+      ),
     );
   }
 
@@ -372,7 +349,7 @@ class _OtpScreenState extends State<OtpScreen> with TickerProviderStateMixin {
         ),
         const SizedBox(height: 8),
         Text(
-          'We sent a 6-digit code to\n${widget.phoneNumber}',
+          'We sent a 6-digit code to\n${widget.email}',
           textAlign: TextAlign.center,
           style: TextStyle(
             fontFamily: 'Poppins',
@@ -608,7 +585,7 @@ class _OtpScreenState extends State<OtpScreen> with TickerProviderStateMixin {
             ),
             const SizedBox(height: 8),
             Text(
-              'Your phone number has been\nsuccessfully verified.',
+              'Your email has been\nsuccessfully verified.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontFamily: 'Poppins',
