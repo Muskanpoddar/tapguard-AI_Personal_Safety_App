@@ -79,17 +79,7 @@ class AppRoutes {
 
       case otp:
         final args = routeSettings.arguments as Map<String, String>? ?? {};
-        return _slide(
-          OtpScreen(
-            phoneNumber: args['phone'] ?? '',
-            verificationId: args['verificationId'] ?? '',
-            resendToken:
-                args['resendToken'] != null && args['resendToken']!.isNotEmpty
-                ? int.tryParse(args['resendToken']!)
-                : null,
-          ),
-          routeSettings,
-        );
+        return _slide(OtpScreen(email: args['email'] ?? ''), routeSettings);
 
       case profileSetup:
         return _slide(const ProfileSetupScreen(), routeSettings);
