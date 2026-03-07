@@ -1,9 +1,12 @@
+// lib/presentation/auth/login_screen.dart
+//
+// Login Screen – Email OTP (free SMTP via Gmail)
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/routes/app_routes.dart';
-import '../../data/repositories/auth_repository.dart';
+import '../../data/services/email_otp_service.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  LOGIN SCREEN
@@ -17,34 +20,21 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen>
     with SingleTickerProviderStateMixin {
-  final TextEditingController _phoneController = TextEditingController();
-  final FocusNode _phoneFocus = FocusNode();
+  final TextEditingController _emailController = TextEditingController();
+  final FocusNode _emailFocus = FocusNode();
 
-  String _selectedCountryCode = '+1';
-  String _selectedFlag = '🇺🇸';
   bool _isLoading = false;
-  bool _phoneValid = false;
+  bool _emailValid = false;
 
-  final _authRepo = AuthRepository();
+  // Simple email regex
+  static final _emailRegex = RegExp(
+    r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$',
+  );
 
   // Entrance animation
   late AnimationController _enterController;
   late Animation<double> _enterFade;
   late Animation<double> _enterSlide;
-
-  // Country codes list
-  final List<Map<String, String>> _countryCodes = [
-    {'flag': '🇺🇸', 'code': '+1', 'name': 'United States'},
-    {'flag': '🇬🇧', 'code': '+44', 'name': 'United Kingdom'},
-    {'flag': '🇮🇳', 'code': '+91', 'name': 'India'},
-    {'flag': '🇦🇺', 'code': '+61', 'name': 'Australia'},
-    {'flag': '🇨🇦', 'code': '+1', 'name': 'Canada'},
-    {'flag': '🇩🇪', 'code': '+49', 'name': 'Germany'},
-    {'flag': '🇫🇷', 'code': '+33', 'name': 'France'},
-    {'flag': '🇸🇦', 'code': '+966', 'name': 'Saudi Arabia'},
-    {'flag': '🇵🇰', 'code': '+92', 'name': 'Pakistan'},
-    {'flag': '🇧🇩', 'code': '+880', 'name': 'Bangladesh'},
-  ];
 
   @override
   void initState() {
@@ -71,57 +61,40 @@ class _LoginScreenState extends State<LoginScreen>
 
     _enterController.forward();
 
-    _phoneController.addListener(() {
-      final isValid = _phoneController.text.trim().length >= 7;
-      if (isValid != _phoneValid) {
-        setState(() => _phoneValid = isValid);
-      }
+    _emailController.addListener(() {
+      final valid = _emailRegex.hasMatch(_emailController.text.trim());
+      if (valid != _emailValid) setState(() => _emailValid = valid);
     });
   }
 
   @override
   void dispose() {
-    _phoneController.dispose();
-    _phoneFocus.dispose();
+    _emailController.dispose();
+    _emailFocus.dispose();
     _enterController.dispose();
     super.dispose();
   }
 
-  // ── Send OTP ──────────────────────────────────────────────────────────────
+  // ── Send OTP via email ────────────────────────────────────────────────────
   Future<void> _sendOtp() async {
-    if (!_phoneValid || _isLoading) return;
+    if (!_emailValid || _isLoading) return;
 
     FocusScope.of(context).unfocus();
     HapticFeedback.mediumImpact();
     setState(() => _isLoading = true);
 
-    final fullPhone = '$_selectedCountryCode${_phoneController.text.trim()}';
+    final email = _emailController.text.trim().toLowerCase();
+    final error = await EmailOtpService.sendOtp(email);
 
-    await _authRepo.sendOtp(
-      fullPhone,
-      onCodeSent: (String verificationId, int? resendToken) {
-        if (!mounted) return;
-        setState(() => _isLoading = false);
-        Navigator.of(context).pushNamed(
-          AppRoutes.otp,
-          arguments: {
-            'phone': fullPhone,
-            'verificationId': verificationId,
-            'resendToken': resendToken?.toString() ?? '',
-          },
-        );
-      },
-      onAutoVerified: () {
-        if (!mounted) return;
-        setState(() => _isLoading = false);
-        Navigator.of(context).pushReplacementNamed(AppRoutes.home);
-      },
-      onError: (String msg) {
-        if (!mounted) return;
-        setState(() => _isLoading = false);
-        _showError(msg);
-      },
-    );
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (error != null) {
+      _showError(error);
+      return;
+    }
+
+    Navigator.of(context).pushNamed(AppRoutes.otp, arguments: {'email': email});
   }
 
   void _showError(String msg) {
@@ -131,94 +104,6 @@ class _LoginScreenState extends State<LoginScreen>
         backgroundColor: AppColors.sos,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
-  }
-
-  // ── Country picker sheet ──────────────────────────────────────────────────
-  void _pickCountry() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.white,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (_) => DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.55,
-        maxChildSize: 0.85,
-        builder: (_, scrollController) => Column(
-          children: [
-            const SizedBox(height: 12),
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Select Country',
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF1A1A2E),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: ListView.builder(
-                controller: scrollController,
-                itemCount: _countryCodes.length,
-                itemBuilder: (_, i) {
-                  final c = _countryCodes[i];
-                  final selected =
-                      c['code'] == _selectedCountryCode &&
-                      c['flag'] == _selectedFlag;
-                  return ListTile(
-                    leading: Text(
-                      c['flag']!,
-                      style: const TextStyle(fontSize: 28),
-                    ),
-                    title: Text(
-                      c['name']!,
-                      style: const TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    trailing: Text(
-                      c['code']!,
-                      style: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                    selected: selected,
-                    selectedTileColor: AppColors.primary.withOpacity(0.06),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    onTap: () {
-                      setState(() {
-                        _selectedCountryCode = c['code']!;
-                        _selectedFlag = c['flag']!;
-                      });
-                      Navigator.pop(context);
-                    },
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -263,7 +148,7 @@ class _LoginScreenState extends State<LoginScreen>
                   const SizedBox(height: 10),
 
                   Text(
-                    AppStrings.welcomeBody,
+                    'Enter your email address and we\'ll send\na verification code instantly.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontFamily: 'Poppins',
@@ -275,8 +160,8 @@ class _LoginScreenState extends State<LoginScreen>
 
                   const SizedBox(height: 36),
 
-                  // ── Phone input card ──────────────────────────────────
-                  _buildPhoneCard(),
+                  // ── Email input card ──────────────────────────────────────────────────
+                  _buildEmailCard(),
 
                   const SizedBox(height: 52),
 
@@ -308,8 +193,8 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  // ── Phone number card ─────────────────────────────────────────────────────
-  Widget _buildPhoneCard() {
+  // ── Email input card ──────────────────────────────────────────────────────
+  Widget _buildEmailCard() {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -328,7 +213,7 @@ class _LoginScreenState extends State<LoginScreen>
         children: [
           // Label
           const Text(
-            AppStrings.phoneNumber,
+            'Email Address',
             style: TextStyle(
               fontFamily: 'Poppins',
               fontSize: 14,
@@ -339,92 +224,57 @@ class _LoginScreenState extends State<LoginScreen>
 
           const SizedBox(height: 12),
 
-          // Country code + phone field
-          Row(
-            children: [
-              // Country picker button
-              GestureDetector(
-                onTap: _pickCountry,
-                child: Container(
-                  height: 52,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF0EFF5),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(_selectedFlag, style: const TextStyle(fontSize: 22)),
-                      const SizedBox(width: 6),
-                      Text(
-                        _selectedCountryCode,
-                        style: const TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF1A1A2E),
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Icon(
-                        Icons.keyboard_arrow_down_rounded,
-                        size: 18,
-                        color: Colors.grey.shade500,
-                      ),
-                    ],
-                  ),
+          // Email text field
+          Container(
+            height: 52,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF0EFF5),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: _emailFocus.hasFocus
+                    ? AppColors.primary
+                    : Colors.transparent,
+                width: 1.5,
+              ),
+            ),
+            child: TextField(
+              controller: _emailController,
+              focusNode: _emailFocus,
+              keyboardType: TextInputType.emailAddress,
+              autocorrect: false,
+              style: const TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF1A1A2E),
+              ),
+              decoration: InputDecoration(
+                hintText: 'you@gmail.com',
+                hintStyle: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 15,
+                  color: Colors.grey.shade400,
+                ),
+                prefixIcon: Icon(
+                  Icons.email_outlined,
+                  color: _emailValid ? AppColors.primary : Colors.grey.shade400,
+                  size: 20,
+                ),
+                suffixIcon: _emailValid
+                    ? const Icon(
+                        Icons.check_circle_rounded,
+                        color: AppColors.success,
+                        size: 20,
+                      )
+                    : null,
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 15,
                 ),
               ),
-
-              const SizedBox(width: 10),
-
-              // Phone number text field
-              Expanded(
-                child: Container(
-                  height: 52,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF0EFF5),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: _phoneFocus.hasFocus
-                          ? AppColors.primary
-                          : Colors.transparent,
-                      width: 1.5,
-                    ),
-                  ),
-                  child: TextField(
-                    controller: _phoneController,
-                    focusNode: _phoneFocus,
-                    keyboardType: TextInputType.phone,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(12),
-                    ],
-                    style: const TextStyle(
-                      fontFamily: 'Poppins',
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                      color: Color(0xFF1A1A2E),
-                    ),
-                    decoration: InputDecoration(
-                      hintText: AppStrings.phonePlaceholder,
-                      hintStyle: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 15,
-                        color: Colors.grey.shade400,
-                      ),
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 15,
-                      ),
-                    ),
-                    onSubmitted: (_) => _sendOtp(),
-                  ),
-                ),
-              ),
-            ],
+              onSubmitted: (_) => _sendOtp(),
+            ),
           ),
 
           const SizedBox(height: 16),
@@ -434,7 +284,7 @@ class _LoginScreenState extends State<LoginScreen>
             width: double.infinity,
             height: 56,
             child: ElevatedButton(
-              onPressed: (_phoneValid && !_isLoading) ? _sendOtp : null,
+              onPressed: (_emailValid && !_isLoading) ? _sendOtp : null,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
@@ -457,16 +307,16 @@ class _LoginScreenState extends State<LoginScreen>
                   : Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text(
-                          AppStrings.sendOtp,
-                          style: const TextStyle(
+                        const Text(
+                          'Send OTP',
+                          style: TextStyle(
                             fontFamily: 'Poppins',
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
                         const SizedBox(width: 8),
-                        const Icon(Icons.arrow_forward_rounded, size: 18),
+                        const Icon(Icons.send_rounded, size: 18),
                       ],
                     ),
             ),
