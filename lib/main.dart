@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'app.dart';
+import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,12 +25,10 @@ void main() async {
   );
 
   // Initialize Firebase
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   runApp(
     // Riverpod wrapper — wraps entire app for state management
-    const ProviderScope(
-      child: TapGuardApp(),
-    ),
+    const ProviderScope(child: TapGuardApp()),
   );
 }
