@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/routes/app_routes.dart';
+import '../../data/services/auth_session_service.dart';
 import '../../data/services/email_otp_service.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -39,6 +40,15 @@ class _LoginScreenState extends State<LoginScreen>
   @override
   void initState() {
     super.initState();
+
+    // Returning users with an active Firebase session should not re-verify OTP.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final hasActiveSession = await AuthSessionService.hasActiveSession();
+      if (hasActiveSession && mounted) {
+        Navigator.of(context).pushReplacementNamed(AppRoutes.home);
+      }
+    });
+
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
