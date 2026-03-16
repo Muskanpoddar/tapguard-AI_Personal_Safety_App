@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/routes/app_routes.dart';
+import '../../data/services/auth_session_service.dart';
 import '../../data/services/email_otp_service.dart';
 
 class OtpScreen extends StatefulWidget {
@@ -209,7 +210,9 @@ class _OtpScreenState extends State<OtpScreen> with TickerProviderStateMixin {
 
     // OTP correct — create an anonymous Firebase session so auth state works
     try {
-      await FirebaseAuth.instance.signInAnonymously();
+      if (FirebaseAuth.instance.currentUser == null) {
+        await FirebaseAuth.instance.signInAnonymously();
+      }
     } catch (_) {
       // Non-fatal: continue even if anonymous auth fails
     }
@@ -219,10 +222,13 @@ class _OtpScreenState extends State<OtpScreen> with TickerProviderStateMixin {
       _loading = false;
       _success = true;
     });
+
+    await AuthSessionService.markSessionVerified(widget.email);
+
     HapticFeedback.heavyImpact();
     await Future.delayed(const Duration(milliseconds: 850));
     if (!mounted) return;
-    Navigator.of(context).pushReplacementNamed(AppRoutes.profileSetup);
+    Navigator.of(context).pushReplacementNamed(AppRoutes.profile);
   }
 
   // ── resend ────────────────────────────────────────────────────────────────
