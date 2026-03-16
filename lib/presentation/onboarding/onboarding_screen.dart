@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/routes/app_routes.dart';
+import '../../data/services/auth_session_service.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  ONBOARDING SCREEN
@@ -126,8 +127,16 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         );
         return;
       }
-      Navigator.of(context).pushReplacementNamed(AppRoutes.login);
+      _goToAuthOrHome();
     }
+  }
+
+  Future<void> _goToAuthOrHome() async {
+    final hasActiveSession = await AuthSessionService.hasActiveSession();
+    if (!mounted) return;
+
+    final route = hasActiveSession ? AppRoutes.home : AppRoutes.login;
+    Navigator.of(context).pushReplacementNamed(route);
   }
 
   void _goBack() {
@@ -226,8 +235,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           ),
 
           GestureDetector(
-            onTap: () =>
-                Navigator.of(context).pushReplacementNamed(AppRoutes.login),
+            onTap: _goToAuthOrHome,
             child: Text(
               'Skip',
               style: TextStyle(
@@ -425,8 +433,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 ),
               ),
               TextButton(
-                onPressed: () =>
-                    Navigator.of(context).pushReplacementNamed(AppRoutes.login),
+                onPressed: _goToAuthOrHome,
                 child: Text(
                   AppStrings.skipForNow,
                   style: TextStyle(
