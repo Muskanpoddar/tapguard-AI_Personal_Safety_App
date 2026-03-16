@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../data/services/auth_session_service.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/routes/app_routes.dart';
@@ -165,13 +166,20 @@ class _SplashScreenState extends State<SplashScreen>
       // Finger still on screen — wait for finger lift (handled in onPointerUp)
       return;
     }
-    _navigateToOnboarding();
+    _navigateAfterSplash();
   }
 
-  void _navigateToOnboarding() {
+  Future<void> _navigateAfterSplash() async {
     _autoNavigateTimer?.cancel();
     if (!mounted) return;
-    Navigator.of(context).pushReplacementNamed(AppRoutes.onboarding);
+
+    // Keep returning users signed in; only new/logged-out users go to onboarding/login.
+    final hasActiveSession = await AuthSessionService.hasActiveSession();
+    if (!mounted) return;
+
+    final nextRoute = hasActiveSession ? AppRoutes.home : AppRoutes.onboarding;
+
+    Navigator.of(context).pushReplacementNamed(nextRoute);
   }
 
   // ── Finger DOWN — freeze everything ──────────────────────────────────────
@@ -199,7 +207,7 @@ class _SplashScreenState extends State<SplashScreen>
       // Small delay so user sees the resume
       _autoNavigateTimer = Timer(
         const Duration(milliseconds: 300),
-        _navigateToOnboarding,
+        _navigateAfterSplash,
       );
     } else {
       // Resume load bar from where it stopped
