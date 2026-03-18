@@ -89,7 +89,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     _phoneController.dispose();
     _nameFocus.dispose();
     _phoneFocus.dispose();
-    for (final c in _stagger) c.dispose();
+    for (final c in _stagger) {
+      c.dispose();
+    }
     super.dispose();
   }
 
