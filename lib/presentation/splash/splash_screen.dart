@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../data/services/auth_session_service.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/routes/app_routes.dart';
@@ -169,17 +168,12 @@ class _SplashScreenState extends State<SplashScreen>
     _navigateAfterSplash();
   }
 
-  Future<void> _navigateAfterSplash() async {
+  void _navigateAfterSplash() {
     _autoNavigateTimer?.cancel();
     if (!mounted) return;
 
-    // Keep returning users signed in; only new/logged-out users go to onboarding/login.
-    final hasActiveSession = await AuthSessionService.hasActiveSession();
-    if (!mounted) return;
-
-    final nextRoute = hasActiveSession ? AppRoutes.home : AppRoutes.onboarding;
-
-    Navigator.of(context).pushReplacementNamed(nextRoute);
+    // Always show onboarding first; onboarding then routes to login or home.
+    Navigator.of(context).pushReplacementNamed(AppRoutes.onboarding);
   }
 
   // ── Finger DOWN — freeze everything ──────────────────────────────────────
