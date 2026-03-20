@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class ContactModel {
   final String uid;
   final String phoneNumber;
@@ -32,7 +34,7 @@ class ContactModel {
       'profileImageUrl': profileImageUrl,
       'isEmergencyContact': isEmergencyContact,
       'priority': priority,
-      'addedAt': addedAt.toIso8601String(),
+      'addedAt': Timestamp.fromDate(addedAt),
       'addedByUid': addedByUid,
       'isVerified': isVerified,
       'allowsLocationSharing': allowsLocationSharing,
@@ -48,9 +50,7 @@ class ContactModel {
       profileImageUrl: map['profileImageUrl'],
       isEmergencyContact: map['isEmergencyContact'] ?? false,
       priority: map['priority'] ?? 0,
-      addedAt: map['addedAt'] != null
-          ? DateTime.parse(map['addedAt'])
-          : DateTime.now(),
+      addedAt: (map['addedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       addedByUid: map['addedByUid'] ?? '',
       isVerified: map['isVerified'] ?? false,
       allowsLocationSharing: map['allowsLocationSharing'] ?? true,
