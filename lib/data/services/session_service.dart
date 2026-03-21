@@ -33,7 +33,7 @@ class SessionService {
     final uid = user?.uid ?? 'anon';
     final ref = _db.collection('sessions').doc();
     final id = ref.id;
-    final url = 'https://tapguard.page.link/s/$id';
+    final url = 'https://tapguard-0.web.app/s/$id';
     final now = DateTime.now();
 
     await ref.set({
