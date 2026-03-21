@@ -1,11 +1,6 @@
 // lib/presentation/auth/otp_screen.dart
-//
-// OTP Verification Screen – email-based OTP (free SMTP)
-//  • 6-box digit entry, paste support, backspace navigation
-//  • Staggered fade-in, shake on wrong code
-//  • 60 s countdown resend via EmailOtpService
-
 import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -16,7 +11,6 @@ import '../../data/services/email_otp_service.dart';
 
 class OtpScreen extends StatefulWidget {
   final String email;
-
   const OtpScreen({super.key, required this.email});
 
   @override
@@ -24,39 +18,31 @@ class OtpScreen extends StatefulWidget {
 }
 
 class _OtpScreenState extends State<OtpScreen> with TickerProviderStateMixin {
-  // ── constants ──────────────────────────────────────────────────────────────
   static const int _len = 6;
   static const int _tick = 60;
-  static const double _gap = 8; // dp between boxes
+  static const double _gap = 8;
 
-  // ── controllers & focus ───────────────────────────────────────────────────
   final List<TextEditingController> _ctrl = List.generate(
     _len,
     (_) => TextEditingController(),
   );
   final List<FocusNode> _fn = List.generate(_len, (_) => FocusNode());
 
-  // ── state ─────────────────────────────────────────────────────────────────
   bool _loading = false;
   bool _success = false;
   int _secs = _tick;
   Timer? _timer;
 
-  // ── animations ────────────────────────────────────────────────────────────
   late List<AnimationController> _stagger;
   late List<Animation<double>> _stFade;
   late List<Animation<double>> _stSlide;
-
   late AnimationController _shakeCtrl;
   late Animation<double> _shakeAnim;
-
   late AnimationController _pulseCtrl;
 
-  // ── derived ───────────────────────────────────────────────────────────────
   String get _code => _ctrl.map((c) => c.text).join();
   bool get _filled => _code.length == _len;
 
-  // ── lifecycle ─────────────────────────────────────────────────────────────
   @override
   void initState() {
     super.initState();
@@ -145,22 +131,16 @@ class _OtpScreenState extends State<OtpScreen> with TickerProviderStateMixin {
 
   @override
   void dispose() {
-    for (final c in _ctrl) {
-      c.dispose();
-    }
-    for (final f in _fn) {
-      f.dispose();
-    }
+    for (final c in _ctrl) c.dispose();
+    for (final f in _fn) f.dispose();
     _timer?.cancel();
-    for (final c in _stagger) {
-      c.dispose();
-    }
+    for (final c in _stagger) c.dispose();
     _shakeCtrl.dispose();
     _pulseCtrl.dispose();
     super.dispose();
   }
 
-  // ── input ──────────────────────────────────────────────────────────────────
+  // ── Input handlers ────────────────────────────────────────────────────────
   void _onChange(int idx, String val) {
     if (val.length > 1) {
       final digits = val.replaceAll(RegExp(r'\D'), '');
@@ -191,7 +171,7 @@ class _OtpScreenState extends State<OtpScreen> with TickerProviderStateMixin {
     }
   }
 
-  // ── verify ────────────────────────────────────────────────────────────────
+  // ── Verify OTP ────────────────────────────────────────────────────────────
   Future<void> _verify() async {
     if (!_filled || _loading || _success) return;
     FocusScope.of(context).unfocus();
@@ -208,14 +188,12 @@ class _OtpScreenState extends State<OtpScreen> with TickerProviderStateMixin {
       return;
     }
 
-    // OTP correct — create an anonymous Firebase session so auth state works
+    // Sign in anonymously so Firestore auth works
     try {
       if (FirebaseAuth.instance.currentUser == null) {
         await FirebaseAuth.instance.signInAnonymously();
       }
-    } catch (_) {
-      // Non-fatal: continue even if anonymous auth fails
-    }
+    } catch (_) {}
 
     if (!mounted) return;
     setState(() {
@@ -224,19 +202,39 @@ class _OtpScreenState extends State<OtpScreen> with TickerProviderStateMixin {
     });
 
     await AuthSessionService.markSessionVerified(widget.email);
-
     HapticFeedback.heavyImpact();
     await Future.delayed(const Duration(milliseconds: 850));
     if (!mounted) return;
-    Navigator.of(context).pushReplacementNamed(AppRoutes.profile);
+
+    // ── KEY FIX: check if user already has a profile ──────────────────────
+    // New user    → go to Profile Setup
+    // Existing user → go directly to Home
+    bool hasProfile = false;
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid != null) {
+        final doc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .get();
+        hasProfile =
+            doc.exists && (doc.data()?['name'] as String? ?? '').isNotEmpty;
+      }
+    } catch (_) {
+      // Non-fatal — if check fails, send to profile setup
+    }
+
+    if (!mounted) return;
+    Navigator.of(context).pushReplacementNamed(
+      hasProfile ? AppRoutes.home : AppRoutes.profileSetup,
+    );
   }
 
-  // ── resend ────────────────────────────────────────────────────────────────
+  // ── Resend OTP ────────────────────────────────────────────────────────────
   Future<void> _resend() async {
     if (_secs > 0) return;
     HapticFeedback.lightImpact();
     _startTimer();
-
     final error = await EmailOtpService.sendOtp(widget.email);
     if (!mounted) return;
     if (error != null) {
@@ -259,7 +257,6 @@ class _OtpScreenState extends State<OtpScreen> with TickerProviderStateMixin {
         ),
       );
 
-  // ── stagger wrapper ───────────────────────────────────────────────────────
   Widget _fade(int i, Widget child) => AnimatedBuilder(
     animation: _stagger[i],
     builder: (_, w) => Transform.translate(
@@ -299,229 +296,211 @@ class _OtpScreenState extends State<OtpScreen> with TickerProviderStateMixin {
     );
   }
 
-  // ── Back button ───────────────────────────────────────────────────────────
-  Widget _buildBackButton() {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: GestureDetector(
-        onTap: () => Navigator.of(context).pop(),
-        child: Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.06),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: const Icon(
-            Icons.arrow_back_ios_new_rounded,
-            size: 16,
-            color: Color(0xFF1A1A2E),
-          ),
+  Widget _buildBackButton() => Align(
+    alignment: Alignment.centerLeft,
+    child: GestureDetector(
+      onTap: () => Navigator.of(context).pop(),
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.06),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: const Icon(
+          Icons.arrow_back_ios_new_rounded,
+          size: 16,
+          color: Color(0xFF1A1A2E),
         ),
       ),
-    );
-  }
+    ),
+  );
 
-  // ── Top icon ──────────────────────────────────────────────────────────────
-  Widget _buildTopIcon() {
-    return Container(
-      width: 80,
-      height: 80,
-      decoration: BoxDecoration(
-        color: AppColors.primary.withOpacity(0.1),
-        shape: BoxShape.circle,
-      ),
-      child: const Icon(
-        Icons.mark_email_unread_rounded,
-        size: 38,
-        color: AppColors.primary,
-      ),
-    );
-  }
+  Widget _buildTopIcon() => Container(
+    width: 80,
+    height: 80,
+    decoration: BoxDecoration(
+      color: AppColors.primary.withOpacity(0.1),
+      shape: BoxShape.circle,
+    ),
+    child: const Icon(
+      Icons.mark_email_unread_rounded,
+      size: 38,
+      color: AppColors.primary,
+    ),
+  );
 
-  // ── Title + subtitle ──────────────────────────────────────────────────────
-  Widget _buildTitle() {
-    return Column(
-      children: [
-        const Text(
-          'Verification Code',
-          style: TextStyle(
-            fontFamily: 'Poppins',
-            fontSize: 26,
-            fontWeight: FontWeight.w800,
-            color: Color(0xFF1A1A2E),
-          ),
+  Widget _buildTitle() => Column(
+    children: [
+      const Text(
+        'Verification Code',
+        style: TextStyle(
+          fontFamily: 'Poppins',
+          fontSize: 26,
+          fontWeight: FontWeight.w800,
+          color: Color(0xFF1A1A2E),
         ),
-        const SizedBox(height: 8),
-        Text(
-          'We sent a 6-digit code to\n${widget.email}',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontFamily: 'Poppins',
-            fontSize: 14,
-            color: Colors.grey.shade600,
-            height: 1.6,
-          ),
+      ),
+      const SizedBox(height: 8),
+      Text(
+        'We sent a 6-digit code to\n${widget.email}',
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontFamily: 'Poppins',
+          fontSize: 14,
+          color: Colors.grey.shade600,
+          height: 1.6,
+        ),
+      ),
+    ],
+  );
+
+  Widget _buildCard() => Container(
+    padding: const EdgeInsets.all(24),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(24),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.06),
+          blurRadius: 24,
+          offset: const Offset(0, 6),
         ),
       ],
-    );
-  }
-
-  // ── OTP card ──────────────────────────────────────────────────────────────
-  Widget _buildCard() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 24,
-            offset: const Offset(0, 6),
+    ),
+    child: Column(
+      children: [
+        // Digit boxes with shake
+        AnimatedBuilder(
+          animation: _shakeAnim,
+          builder: (_, child) => Transform.translate(
+            offset: Offset(_shakeAnim.value, 0),
+            child: child,
           ),
-        ],
-      ),
-      child: Column(
-        children: [
-          // ── Digit boxes (shake wrapper) ────────────────────────────────
-          AnimatedBuilder(
-            animation: _shakeAnim,
-            builder: (_, child) => Transform.translate(
-              offset: Offset(_shakeAnim.value, 0),
-              child: child,
-            ),
-            child: LayoutBuilder(
-              builder: (ctx, box) {
-                final boxW = (box.maxWidth - (_len - 1) * _gap) / _len;
-                return Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(_len, (i) {
-                    final isFilled = _ctrl[i].text.isNotEmpty;
-                    return Padding(
-                      padding: EdgeInsets.only(right: i < _len - 1 ? _gap : 0),
-                      child: _buildDigitBox(i, boxW, isFilled),
-                    );
-                  }),
-                );
-              },
-            ),
+          child: LayoutBuilder(
+            builder: (ctx, box) {
+              final boxW = (box.maxWidth - (_len - 1) * _gap) / _len;
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(_len, (i) {
+                  final isFilled = _ctrl[i].text.isNotEmpty;
+                  return Padding(
+                    padding: EdgeInsets.only(right: i < _len - 1 ? _gap : 0),
+                    child: _buildDigitBox(i, boxW, isFilled),
+                  );
+                }),
+              );
+            },
           ),
-
-          const SizedBox(height: 28),
-
-          // ── Verify button ──────────────────────────────────────────────
-          SizedBox(
-            width: double.infinity,
-            height: 56,
-            child: ElevatedButton(
-              onPressed: (_filled && !_loading) ? _verify : null,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-                elevation: 0,
-                disabledBackgroundColor: AppColors.primary.withOpacity(0.35),
-                disabledForegroundColor: Colors.white70,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-              ),
-              child: _loading
-                  ? const SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2.5,
-                      ),
-                    )
-                  : const Text(
-                      'Verify Code',
-                      style: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-            ),
-          ),
-
-          const SizedBox(height: 20),
-
-          // ── Resend row ─────────────────────────────────────────────────
-          _buildResendRow(),
-        ],
-      ),
-    );
-  }
-
-  // ── Single digit box ──────────────────────────────────────────────────────
-  Widget _buildDigitBox(int idx, double width, bool filled) {
-    return SizedBox(
-      width: width,
-      height: width * 1.2,
-      child: KeyboardListener(
-        focusNode: FocusNode(),
-        onKeyEvent: (e) => _onKey(idx, e),
-        child: TextField(
-          controller: _ctrl[idx],
-          focusNode: _fn[idx],
-          textAlign: TextAlign.center,
-          keyboardType: TextInputType.number,
-          inputFormatters: [
-            FilteringTextInputFormatter.digitsOnly,
-            LengthLimitingTextInputFormatter(1),
-          ],
-          style: TextStyle(
-            fontFamily: 'Poppins',
-            fontSize: width * 0.42,
-            fontWeight: FontWeight.w700,
-            color: const Color(0xFF1A1A2E),
-          ),
-          decoration: InputDecoration(
-            filled: true,
-            fillColor: filled
-                ? AppColors.primary.withOpacity(0.08)
-                : const Color(0xFFF0EFF5),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide.none,
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(
-                color: filled
-                    ? AppColors.primary.withOpacity(0.4)
-                    : Colors.transparent,
-                width: 1.5,
-              ),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: const BorderSide(color: AppColors.primary, width: 2),
-            ),
-            contentPadding: EdgeInsets.zero,
-          ),
-          onChanged: (v) => _onChange(idx, v),
-          onTap: () {
-            _ctrl[idx].selection = TextSelection(
-              baseOffset: 0,
-              extentOffset: _ctrl[idx].text.length,
-            );
-          },
         ),
-      ),
-    );
-  }
 
-  // ── Resend row ────────────────────────────────────────────────────────────
+        const SizedBox(height: 28),
+
+        // Verify button
+        SizedBox(
+          width: double.infinity,
+          height: 56,
+          child: ElevatedButton(
+            onPressed: (_filled && !_loading) ? _verify : null,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              disabledBackgroundColor: AppColors.primary.withOpacity(0.35),
+              disabledForegroundColor: Colors.white70,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+            child: _loading
+                ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2.5,
+                    ),
+                  )
+                : const Text(
+                    'Verify Code',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+          ),
+        ),
+
+        const SizedBox(height: 20),
+        _buildResendRow(),
+      ],
+    ),
+  );
+
+  Widget _buildDigitBox(int idx, double width, bool filled) => SizedBox(
+    width: width,
+    height: width * 1.2,
+    child: KeyboardListener(
+      focusNode: FocusNode(),
+      onKeyEvent: (e) => _onKey(idx, e),
+      child: TextField(
+        controller: _ctrl[idx],
+        focusNode: _fn[idx],
+        textAlign: TextAlign.center,
+        keyboardType: TextInputType.number,
+        inputFormatters: [
+          FilteringTextInputFormatter.digitsOnly,
+          LengthLimitingTextInputFormatter(1),
+        ],
+        style: TextStyle(
+          fontFamily: 'Poppins',
+          fontSize: width * 0.42,
+          fontWeight: FontWeight.w700,
+          color: const Color(0xFF1A1A2E),
+        ),
+        decoration: InputDecoration(
+          filled: true,
+          fillColor: filled
+              ? AppColors.primary.withOpacity(0.08)
+              : const Color(0xFFF0EFF5),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide(
+              color: filled
+                  ? AppColors.primary.withOpacity(0.4)
+                  : Colors.transparent,
+              width: 1.5,
+            ),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(color: AppColors.primary, width: 2),
+          ),
+          contentPadding: EdgeInsets.zero,
+        ),
+        onChanged: (v) => _onChange(idx, v),
+        onTap: () {
+          _ctrl[idx].selection = TextSelection(
+            baseOffset: 0,
+            extentOffset: _ctrl[idx].text.length,
+          );
+        },
+      ),
+    ),
+  );
+
   Widget _buildResendRow() {
     final canResend = _secs <= 0;
     return Row(
@@ -551,64 +530,61 @@ class _OtpScreenState extends State<OtpScreen> with TickerProviderStateMixin {
     );
   }
 
-  // ── Success body ──────────────────────────────────────────────────────────
-  Widget _buildSuccessBody() {
-    return AnimatedBuilder(
-      animation: _pulseCtrl,
-      builder: (_, child) =>
-          Transform.scale(scale: 1.0 + _pulseCtrl.value * 0.04, child: child),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.success.withOpacity(0.18),
-              blurRadius: 32,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Column(
-          children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: AppColors.success.withOpacity(0.12),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.check_circle_rounded,
-                size: 46,
-                color: AppColors.success,
-              ),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'Verified!',
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 26,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF1A1A2E),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Your email has been\nsuccessfully verified.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 14,
-                color: Colors.grey.shade500,
-                height: 1.6,
-              ),
-            ),
-          ],
-        ),
+  Widget _buildSuccessBody() => AnimatedBuilder(
+    animation: _pulseCtrl,
+    builder: (_, child) =>
+        Transform.scale(scale: 1.0 + _pulseCtrl.value * 0.04, child: child),
+    child: Container(
+      padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.success.withOpacity(0.18),
+            blurRadius: 32,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
-    );
-  }
+      child: Column(
+        children: [
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              color: AppColors.success.withOpacity(0.12),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.check_circle_rounded,
+              size: 46,
+              color: AppColors.success,
+            ),
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'Verified!',
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 26,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF1A1A2E),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Your email has been\nsuccessfully verified.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 14,
+              color: Colors.grey.shade500,
+              height: 1.6,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }
