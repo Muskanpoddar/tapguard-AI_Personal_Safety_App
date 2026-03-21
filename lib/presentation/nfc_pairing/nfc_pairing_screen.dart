@@ -6,6 +6,13 @@
 // 3. NFC scans for nearby device (4cm)
 // 4. On success → saves contact to Firestore using ContactModel
 // 5. Navigates to Active Session screen
+//
+// CANCEL behaviour:
+//   → Stops NFC scanning only
+//   → Keeps Firebase session alive (GPS still streaming)
+//   → Keeps any saved contacts
+//   → User can retry NFC or share link manually
+//   → Session only ends on Active Session screen → "End Session"
 
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -39,7 +46,7 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
   bool _creatingSession = false;
   bool _savingContact = false;
   bool _nfcAvailable = false;
-  SessionModel? _session0;
+  SessionModel? _session0; // kept alive even after cancel
 
   StreamSubscription<NfcWriteStatus>? _statusSub;
   StreamSubscription<String>? _errorSub;
@@ -114,7 +121,6 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
             _statusMessage = 'Done! Saving contact…';
             _errorMessage = '';
             HapticFeedback.heavyImpact();
-            // Save contact then navigate
             _onNfcSuccess();
             break;
           case NfcWriteStatus.error:
@@ -133,13 +139,26 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
     });
   }
 
-  // ── Main action: create session + start NFC ───────────────────────────────
+  // ── Start / Retry NFC sharing ─────────────────────────────────────────────
   Future<void> _startNfcSharing() async {
     if (!_nfcAvailable) {
       _showNfcDialog();
       return;
     }
 
+    // ── If session already exists → just restart NFC, reuse session ─────────
+    // This happens when user cancelled and taps "Try Again"
+    // No need to create a new Firebase session — GPS is still streaming
+    if (_session0 != null) {
+      setState(() {
+        _statusMessage = 'Ready! Tap your phone\nagainst another device.';
+        _errorMessage = '';
+      });
+      await _nfc.startWriting(_session0!.shareUrl);
+      return;
+    }
+
+    // ── First time — create new Firebase session ─────────────────────────────
     setState(() {
       _creatingSession = true;
       _statusMessage = 'Creating secure session…';
@@ -147,7 +166,7 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
     });
 
     try {
-      // Get user name from Firestore profile
+      // Get real user name + phone from Firestore
       final uid = _auth.currentUser?.uid ?? '';
       String name = 'User';
       String phone = '';
@@ -160,7 +179,7 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
         }
       }
 
-      // Create Firebase session → get shareUrl
+      // Create Firebase session → shareUrl
       final session = await _session.createSession(
         ownerName: name,
         ownerPhone: phone,
@@ -172,7 +191,7 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
         _statusMessage = 'Ready! Tap your phone\nagainst another device.';
       });
 
-      // Start NFC — write shareUrl to nearby device
+      // Write shareUrl to nearby phone via NFC
       await _nfc.startWriting(session.shareUrl);
     } catch (e) {
       setState(() {
@@ -184,8 +203,7 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
     }
   }
 
-  // ── Called after NFC write succeeds ──────────────────────────────────────
-  // Saves receiver as a contact in Firestore using ContactModel
+  // ── NFC write succeeded → save contact ───────────────────────────────────
   Future<void> _onNfcSuccess() async {
     if (_session0 == null) {
       _navigateToSession();
@@ -204,17 +222,12 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
         return;
       }
 
-      // ── What we know about the receiver ──────────────────────────────
-      // At this point we only know they received the NFC link.
-      // When they open the link and join the session, their UID gets
-      // written to sessions/{sessionId}/receiverUid in Firestore.
-      // We wait up to 10 seconds for them to open the link.
       String receiverUid =
           'nfc_contact_${DateTime.now().millisecondsSinceEpoch}';
       String receiverName = 'NFC Contact';
       String receiverPhone = '';
 
-      // Try to fetch receiver info from session doc (if they've joined)
+      // Try to get receiver info if they've already opened the link
       try {
         final sessionDoc = await _db
             .collection('sessions')
@@ -225,7 +238,6 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
         final data = sessionDoc.data() ?? {};
         if (data['receiverUid'] != null) {
           receiverUid = data['receiverUid'] as String;
-          // Fetch their profile
           final receiverDoc = await _db
               .collection('users')
               .doc(receiverUid)
@@ -237,10 +249,10 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
           }
         }
       } catch (_) {
-        // Non-fatal — save with placeholder, update later when they join
+        // Non-fatal — save with placeholder, update when they join
       }
 
-      // ── Build ContactModel using your exact model ─────────────────────
+      // Build ContactModel
       final contact = ContactModel(
         uid: receiverUid,
         phoneNumber: receiverPhone,
@@ -254,7 +266,7 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
         allowsLocationSharing: true,
       );
 
-      // ── Write to Firestore: users/{myUid}/contacts/{receiverUid} ──────
+      // Save to Firestore: users/{myUid}/contacts/{receiverUid}
       await _db
           .collection('users')
           .doc(myUid)
@@ -262,7 +274,6 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
           .doc(receiverUid)
           .set({
             ...contact.toMap(),
-            // Extra real-time fields for home screen
             'isActive': true,
             'lastSeen': FieldValue.serverTimestamp(),
             'isPaired': true,
@@ -270,10 +281,9 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
             'sessionId': _session0!.sessionId,
           }, SetOptions(merge: true));
 
-      // ── Also update the session doc so receiver knows who shared ──────
+      // Update session doc
       await _db.collection('sessions').doc(_session0!.sessionId).update({
         'senderUid': myUid,
-        'senderName': contact.addedByUid,
       });
 
       setState(() {
@@ -281,14 +291,12 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
         _statusMessage = 'Contact saved! Starting session…';
       });
     } catch (e) {
-      // Non-fatal — still navigate even if contact save fails
       setState(() {
         _savingContact = false;
         _statusMessage = 'Session ready!';
       });
     }
 
-    // Wait briefly so user sees the success state
     await Future.delayed(const Duration(milliseconds: 1200));
     _navigateToSession();
   }
@@ -298,12 +306,22 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
     Navigator.of(context).pushReplacementNamed(AppRoutes.activeSession);
   }
 
-  Future<void> _cancel() async {
-    await _nfc.stopSession();
+  // ── CANCEL — stops NFC ONLY, keeps session + GPS + contact alive ──────────
+  void _cancel() {
+    // Only stop NFC tag writing
+    _nfc.stopSession();
+
+    // Do NOT call _session.endSession() — GPS keeps streaming
+    // Do NOT clear _session0 — so user can retry or share link
+    // Do NOT clear contact — it may already be saved
+
     setState(() {
       _nfcStatus = NfcWriteStatus.idle;
       _statusMessage = '';
       _errorMessage = '';
+      _creatingSession = false;
+      _savingContact = false;
+      // _session0 intentionally kept alive ✓
     });
   }
 
@@ -381,8 +399,8 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
         backgroundColor: const Color(0xFFF4F3F8),
         elevation: 0,
         leading: GestureDetector(
-          onTap: () async {
-            await _cancel();
+          onTap: () {
+            _cancel(); // stop NFC only
             if (mounted) Navigator.of(context).pop();
           },
           child: Container(
@@ -423,19 +441,16 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
           child: Column(
             children: [
               const SizedBox(height: 16),
-
-              // ── How it works card ───────────────────────────────────────
               _buildHowItWorks(),
-
               const SizedBox(height: 28),
 
-              // ── NFC animation ───────────────────────────────────────────
+              // NFC animation circle
               Expanded(
                 child: Center(
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      // Expanding ring
+                      // Expanding ripple ring
                       if (isActive)
                         AnimatedBuilder(
                           animation: _ringCtrl,
@@ -517,7 +532,7 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
                 ),
               ),
 
-              // ── Status text ─────────────────────────────────────────────
+              // Status text
               if (_statusMessage.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
@@ -538,7 +553,7 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
                   ),
                 ),
 
-              // ── Error message ───────────────────────────────────────────
+              // Error message
               if (_errorMessage.isNotEmpty)
                 Container(
                   margin: const EdgeInsets.only(bottom: 12),
@@ -572,7 +587,7 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
                   ),
                 ),
 
-              // ── Share URL copy pill ─────────────────────────────────────
+              // Share URL copy pill
               if (_session0 != null && !isSuccess)
                 GestureDetector(
                   onTap: () {
@@ -633,7 +648,7 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
                   ),
                 ),
 
-              // ── Action button ───────────────────────────────────────────
+              // Action button
               if (!isSuccess) _buildButton(isActive),
 
               const SizedBox(height: 24),
@@ -644,109 +659,133 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
     );
   }
 
-  // ── How it works steps ────────────────────────────────────────────────────
-  Widget _buildHowItWorks() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          _step(
-            Icons.shield_rounded,
-            AppColors.primary,
-            'Your live location is saved to a private secure session',
-          ),
-          const SizedBox(height: 10),
-          _step(
-            Icons.wifi_rounded,
-            AppColors.primary,
-            'Hold your phone within 4cm of ANY nearby phone',
-          ),
-          const SizedBox(height: 10),
-          _step(
-            Icons.notifications_active_rounded,
-            AppColors.success,
-            'They get a notification — no app or setup needed',
-          ),
-          const SizedBox(height: 10),
-          _step(
-            Icons.people_rounded,
-            AppColors.success,
-            'They\'re saved to your trusted contacts automatically',
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _step(IconData icon, Color color, String text) {
-    return Row(
-      children: [
-        Container(
-          width: 34,
-          height: 34,
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.10),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(icon, color: color, size: 18),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            text,
-            style: const TextStyle(
-              fontFamily: 'Poppins',
-              fontSize: 12,
-              color: Color(0xFF1A1A2E),
-              height: 1.4,
-            ),
-          ),
+  // ── How it works card ─────────────────────────────────────────────────────
+  Widget _buildHowItWorks() => Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.04),
+          blurRadius: 12,
+          offset: const Offset(0, 4),
         ),
       ],
-    );
-  }
+    ),
+    child: Column(
+      children: [
+        _step(
+          Icons.shield_rounded,
+          AppColors.primary,
+          'Your live location is saved to a private secure session',
+        ),
+        const SizedBox(height: 10),
+        _step(
+          Icons.wifi_rounded,
+          AppColors.primary,
+          'Hold your phone within 4cm of ANY nearby phone',
+        ),
+        const SizedBox(height: 10),
+        _step(
+          Icons.notifications_active_rounded,
+          AppColors.success,
+          'They get a notification — no app or setup needed',
+        ),
+        const SizedBox(height: 10),
+        _step(
+          Icons.people_rounded,
+          AppColors.success,
+          "They're saved to your trusted contacts automatically",
+        ),
+      ],
+    ),
+  );
+
+  Widget _step(IconData icon, Color color, String text) => Row(
+    children: [
+      Container(
+        width: 34,
+        height: 34,
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.10),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(icon, color: color, size: 18),
+      ),
+      const SizedBox(width: 12),
+      Expanded(
+        child: Text(
+          text,
+          style: const TextStyle(
+            fontFamily: 'Poppins',
+            fontSize: 12,
+            color: Color(0xFF1A1A2E),
+            height: 1.4,
+          ),
+        ),
+      ),
+    ],
+  );
 
   // ── Action button ─────────────────────────────────────────────────────────
   Widget _buildButton(bool isActive) {
     if (isActive) {
-      return SizedBox(
-        width: double.infinity,
-        height: 56,
-        child: ElevatedButton(
-          onPressed: _cancel,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.white,
-            foregroundColor: AppColors.sos,
-            elevation: 0,
-            side: BorderSide(color: AppColors.sos.withOpacity(0.4)),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
+      // Show scanning status + instant cancel button (no spinner on button)
+      return Column(
+        children: [
+          // Subtle scanning indicator
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withOpacity(0.06),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    color: AppColors.primary,
+                    strokeWidth: 2,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  _nfcStatus == NfcWriteStatus.writing
+                      ? 'Transferring…'
+                      : _creatingSession
+                      ? 'Creating session…'
+                      : 'Scanning for device…',
+                  style: const TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 13,
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
             ),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                  color: AppColors.sos,
-                  strokeWidth: 2.5,
+
+          const SizedBox(height: 14),
+
+          // Cancel — instant, no spinner, no await
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: OutlinedButton(
+              onPressed: _cancel, // sync, instant
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.sos,
+                side: BorderSide(color: AppColors.sos.withOpacity(0.5)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
                 ),
               ),
-              const SizedBox(width: 12),
-              const Text(
+              child: const Text(
                 'Cancel',
                 style: TextStyle(
                   fontFamily: 'Poppins',
@@ -754,12 +793,13 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
                   fontWeight: FontWeight.w600,
                 ),
               ),
-            ],
+            ),
           ),
-        ),
+        ],
       );
     }
 
+    // Idle / error state
     return Column(
       children: [
         SizedBox(
@@ -786,11 +826,13 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
                 ),
                 const SizedBox(width: 10),
                 Text(
-                  _nfcAvailable
-                      ? (_nfcStatus == NfcWriteStatus.error
-                            ? 'Try Again'
-                            : 'Start NFC Location Share')
-                      : 'Enable NFC in Settings',
+                  !_nfcAvailable
+                      ? 'Enable NFC in Settings'
+                      : _nfcStatus == NfcWriteStatus.error
+                      ? 'Try Again'
+                      : _session0 != null
+                      ? 'Retry NFC' // session exists, just retry
+                      : 'Start NFC Location Share',
                   style: const TextStyle(
                     fontFamily: 'Poppins',
                     fontSize: 15,
@@ -802,7 +844,7 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
           ),
         ),
 
-        // Also allow manual link sharing as fallback
+        // Share link button (shown once session exists)
         if (_session0 != null) ...[
           const SizedBox(height: 10),
           SizedBox(
@@ -810,8 +852,22 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
             height: 48,
             child: OutlinedButton(
               onPressed: () {
-                // TODO: Share.share(_session0!.shareUrl)
-                // Add share_plus package for this
+                // TODO: Add share_plus package then:
+                // Share.share(_session0!.shareUrl, subject: 'My live location');
+                Clipboard.setData(ClipboardData(text: _session0!.shareUrl));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: const Text(
+                      'Link copied! Share it manually.',
+                      style: TextStyle(fontFamily: 'Poppins'),
+                    ),
+                    backgroundColor: AppColors.primary,
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                );
               },
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.primary,
