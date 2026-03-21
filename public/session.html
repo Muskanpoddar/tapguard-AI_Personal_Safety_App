@@ -1,0 +1,639 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0"
+    />
+    <title>TapGuard – Live Location</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #f4f3f8;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      /* ── Header ────────────────────────────────────────────────────── */
+      .header {
+        width: 100%;
+        background: white;
+        padding: 16px 20px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+      }
+      .logo {
+        width: 40px;
+        height: 40px;
+        background: rgba(124, 77, 255, 0.12);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+      }
+      .header-title {
+        font-size: 18px;
+        font-weight: 700;
+        color: #1a1a2e;
+      }
+      .header-sub {
+        font-size: 12px;
+        color: #999;
+      }
+
+      /* ── Status badge ───────────────────────────────────────────────── */
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 14px;
+        border-radius: 50px;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.4px;
+        margin: 16px auto;
+      }
+      .badge.green {
+        background: rgba(52, 199, 89, 0.12);
+        color: #34c759;
+      }
+      .badge.orange {
+        background: rgba(255, 149, 0, 0.12);
+        color: #ff9500;
+      }
+      .badge.red {
+        background: rgba(255, 59, 48, 0.12);
+        color: #ff3b30;
+      }
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: currentColor;
+        animation: pulse 1.2s ease-in-out infinite alternate;
+      }
+      @keyframes pulse {
+        from {
+          opacity: 0.5;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+
+      /* ── Map ────────────────────────────────────────────────────────── */
+      #map {
+        width: 100%;
+        flex: 1;
+        min-height: 360px;
+        background: #e8e8e8;
+        position: relative;
+      }
+      #map iframe {
+        width: 100%;
+        height: 100%;
+        border: none;
+      }
+
+      /* ── Cards ──────────────────────────────────────────────────────── */
+      .cards {
+        width: 100%;
+        max-width: 480px;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .card {
+        background: white;
+        border-radius: 16px;
+        padding: 16px;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+      }
+      .card-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: #888;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        margin-bottom: 10px;
+      }
+
+      /* ── Location row ───────────────────────────────────────────────── */
+      .loc-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 0;
+      }
+      .loc-row + .loc-row {
+        border-top: 1px solid #f0f0f0;
+      }
+      .loc-avatar {
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+        font-weight: 700;
+        color: white;
+        flex-shrink: 0;
+      }
+      .loc-info {
+        flex: 1;
+      }
+      .loc-name {
+        font-size: 15px;
+        font-weight: 700;
+        color: #1a1a2e;
+      }
+      .loc-coords {
+        font-size: 12px;
+        color: #888;
+        margin-top: 2px;
+      }
+      .loc-status {
+        font-size: 11px;
+        font-weight: 700;
+        padding: 3px 8px;
+        border-radius: 50px;
+      }
+      .live {
+        background: rgba(52, 199, 89, 0.12);
+        color: #34c759;
+      }
+      .waiting {
+        background: rgba(255, 149, 0, 0.12);
+        color: #ff9500;
+      }
+
+      /* ── Share button ───────────────────────────────────────────────── */
+      .btn {
+        width: 100%;
+        padding: 16px;
+        border: none;
+        border-radius: 14px;
+        font-size: 16px;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        transition: opacity 0.2s;
+      }
+      .btn:active {
+        opacity: 0.8;
+      }
+      .btn-primary {
+        background: #7c4dff;
+        color: white;
+      }
+      .btn-danger {
+        background: #ff3b30;
+        color: white;
+      }
+      .btn-outline {
+        background: white;
+        color: #7c4dff;
+        border: 2px solid rgba(124, 77, 255, 0.3);
+      }
+      .btn:disabled {
+        background: #ccc;
+        cursor: default;
+      }
+
+      /* ── Privacy note ───────────────────────────────────────────────── */
+      .privacy {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        background: rgba(124, 77, 255, 0.06);
+        border-radius: 12px;
+        padding: 12px;
+        font-size: 12px;
+        color: #666;
+        line-height: 1.5;
+      }
+
+      /* ── Loading overlay ────────────────────────────────────────────── */
+      #loading {
+        position: fixed;
+        inset: 0;
+        background: rgba(244, 243, 248, 0.95);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        z-index: 100;
+      }
+      .spinner {
+        width: 48px;
+        height: 48px;
+        border: 4px solid rgba(124, 77, 255, 0.2);
+        border-top-color: #7c4dff;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      #loading p {
+        font-size: 15px;
+        color: #555;
+        font-weight: 500;
+      }
+
+      /* ── Error screen ───────────────────────────────────────────────── */
+      #error-screen {
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 40px 24px;
+        text-align: center;
+        gap: 12px;
+      }
+      #error-screen .icon {
+        font-size: 52px;
+      }
+      #error-screen h2 {
+        font-size: 22px;
+        font-weight: 700;
+        color: #1a1a2e;
+      }
+      #error-screen p {
+        font-size: 14px;
+        color: #888;
+        line-height: 1.6;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Loading overlay -->
+    <div id="loading">
+      <div class="spinner"></div>
+      <p id="loading-text">Loading session…</p>
+    </div>
+
+    <!-- Error screen -->
+    <div id="error-screen">
+      <div class="icon">⚠️</div>
+      <h2>Session Not Found</h2>
+      <p id="error-msg">This session may have ended or the link is invalid.</p>
+    </div>
+
+    <!-- Main content (hidden until session loads) -->
+    <div
+      id="main"
+      style="
+        display: none;
+        width: 100%;
+        flex-direction: column;
+        align-items: center;
+      "
+    >
+      <!-- Header -->
+      <div class="header">
+        <div class="logo">🛡️</div>
+        <div>
+          <div class="header-title">TapGuard</div>
+          <div class="header-sub">Live Safety Session</div>
+        </div>
+      </div>
+
+      <!-- Status badge -->
+      <div class="badge green" id="status-badge">
+        <div class="dot"></div>
+        <span id="status-text">SESSION ACTIVE</span>
+      </div>
+
+      <!-- Map (Google Maps embed showing both pins) -->
+      <div id="map">
+        <iframe id="map-frame" src="" title="Live map"></iframe>
+      </div>
+
+      <!-- Cards -->
+      <div class="cards">
+        <!-- Location cards -->
+        <div class="card">
+          <div class="card-title">Live Locations</div>
+
+          <!-- Person A (sender) -->
+          <div class="loc-row">
+            <div
+              class="loc-avatar"
+              style="background: #7c4dff"
+              id="sender-avatar"
+            >
+              A
+            </div>
+            <div class="loc-info">
+              <div class="loc-name" id="sender-name">Loading…</div>
+              <div class="loc-coords" id="sender-coords">Getting location…</div>
+            </div>
+            <div class="loc-status live">LIVE</div>
+          </div>
+
+          <!-- Person B (receiver — you) -->
+          <div class="loc-row">
+            <div class="loc-avatar" style="background: #06b6d4">Y</div>
+            <div class="loc-info">
+              <div class="loc-name">You</div>
+              <div class="loc-coords" id="receiver-coords">
+                Tap below to share
+              </div>
+            </div>
+            <div
+              class="loc-status"
+              id="receiver-status-badge"
+              style="display: none"
+            ></div>
+          </div>
+        </div>
+
+        <!-- Share MY location button -->
+        <div class="card">
+          <div class="card-title">Your Location</div>
+          <button
+            class="btn btn-primary"
+            id="share-btn"
+            onclick="startSharingLocation()"
+          >
+            📍 Share My Location
+          </button>
+          <p
+            style="
+              font-size: 12px;
+              color: #888;
+              text-align: center;
+              margin-top: 10px;
+            "
+            id="share-note"
+          >
+            Tap to share your live location with the other person
+          </p>
+        </div>
+
+        <!-- Privacy note -->
+        <div class="privacy">
+          🔒 Your location is end-to-end encrypted and only visible to the
+          person who shared this link with you. This session auto-expires in 2
+          hours.
+        </div>
+
+        <!-- Session ended notice (hidden by default) -->
+        <div
+          id="ended-card"
+          class="card"
+          style="display: none; text-align: center; padding: 24px"
+        >
+          <div style="font-size: 36px; margin-bottom: 12px">🔒</div>
+          <div
+            style="
+              font-size: 16px;
+              font-weight: 700;
+              color: #1a1a2e;
+              margin-bottom: 6px;
+            "
+          >
+            Session Ended
+          </div>
+          <div style="font-size: 13px; color: #888">
+            The other person has stopped sharing their location.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+      import {
+        getFirestore,
+        doc,
+        onSnapshot,
+        updateDoc,
+        serverTimestamp,
+      } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+      // ── YOUR Firebase config — replace with yours from Firebase Console ───────
+      const firebaseConfig = {
+        apiKey: "AIzaSyCqZ_xqK9XC-LfaKYG0X59ld6aGOdBEjeI",
+        authDomain: "tapguard-0.firebaseapp.com",
+        projectId: "tapguard-0",
+        storageBucket: "tapguard-0.firebasestorage.app",
+        messagingSenderId: "772290278222",
+        appId: "1:772290278222:web:e15b13a25ef6c4e241641f",
+        measurementId: "G-4756TBC9BR",
+      };
+
+      const app = initializeApp(firebaseConfig);
+      const db = getFirestore(app);
+
+      // ── Extract session ID from URL ───────────────────────────────────────────
+      // URL format: https://tapguard.page.link/s/{sessionId}
+      // Firebase Hosting rewrites this to: /session.html?id={sessionId}
+      const params = new URLSearchParams(window.location.search);
+      const sessionId =
+        params.get("id") || window.location.pathname.split("/").pop();
+
+      if (!sessionId) {
+        showError("No session ID found in the link.");
+      }
+
+      // ── State ─────────────────────────────────────────────────────────────────
+      let watchId = null; // Geolocation watchPosition ID
+      let isSharingBack = false;
+      let senderLat = null;
+      let senderLng = null;
+      let receiverLat = null;
+      let receiverLng = null;
+
+      // ── Listen to Firestore session in real-time ──────────────────────────────
+      const sessionRef = doc(db, "sessions", sessionId);
+
+      const unsub = onSnapshot(sessionRef, (snap) => {
+        if (!snap.exists()) {
+          showError("This session does not exist or has expired.");
+          return;
+        }
+
+        const data = snap.data();
+
+        // ── First load ────────────────────────────────────────────────────────
+        if (document.getElementById("loading").style.display !== "none") {
+          document.getElementById("loading").style.display = "none";
+          document.getElementById("main").style.display = "flex";
+        }
+
+        // ── Session ended ─────────────────────────────────────────────────────
+        if (!data.isActive) {
+          document.getElementById("status-badge").className = "badge red";
+          document.getElementById("status-text").textContent = "SESSION ENDED";
+          document.getElementById("ended-card").style.display = "block";
+          document.getElementById("share-btn").disabled = true;
+          stopSharingLocation();
+          unsub();
+          return;
+        }
+
+        // ── Update sender (Phone A) info ──────────────────────────────────────
+        const sName = data.ownerName || "Unknown";
+        document.getElementById("sender-name").textContent = sName;
+        document.getElementById("sender-avatar").textContent =
+          sName[0].toUpperCase();
+
+        senderLat = data.ownerLat;
+        senderLng = data.ownerLng;
+        if (senderLat && senderLng) {
+          document.getElementById("sender-coords").textContent =
+            `${senderLat.toFixed(5)}, ${senderLng.toFixed(5)}`;
+        }
+
+        // ── Update receiver (Phone B) info ────────────────────────────────────
+        receiverLat = data.receiverLat || null;
+        receiverLng = data.receiverLng || null;
+        if (receiverLat && receiverLng) {
+          document.getElementById("receiver-coords").textContent =
+            `${receiverLat.toFixed(5)}, ${receiverLng.toFixed(5)}`;
+          const badge = document.getElementById("receiver-status-badge");
+          badge.style.display = "block";
+          badge.className = "loc-status live";
+          badge.textContent = "LIVE";
+        }
+
+        // ── Update map with both pins ─────────────────────────────────────────
+        updateMap();
+      });
+
+      // ── Update Google Maps embed with both pins ───────────────────────────────
+      function updateMap() {
+        if (!senderLat || !senderLng) return;
+
+        let markers = `${senderLat},${senderLng}`;
+        let center = `${senderLat},${senderLng}`;
+
+        if (receiverLat && receiverLng) {
+          // Center between both phones
+          center = `${(senderLat + receiverLat) / 2},${(senderLng + receiverLng) / 2}`;
+          markers += `|${receiverLat},${receiverLng}`;
+        }
+
+        // Replace YOUR_GOOGLE_MAPS_API_KEY with your key
+        const src =
+          `https://www.google.com/maps/embed/v1/place` +
+          `?key=YOUR_GOOGLE_MAPS_API_KEY` +
+          `&q=${senderLat},${senderLng}` +
+          `&zoom=15`;
+
+        const frame = document.getElementById("map-frame");
+        if (frame.src !== src) frame.src = src;
+      }
+
+      // ── Start sharing Phone B location → Firestore ────────────────────────────
+      window.startSharingLocation = async function () {
+        if (isSharingBack) return;
+
+        if (!navigator.geolocation) {
+          alert("Your browser does not support location sharing.");
+          return;
+        }
+
+        document.getElementById("share-btn").textContent =
+          "⏳ Getting location…";
+        document.getElementById("share-btn").disabled = true;
+
+        navigator.geolocation.getCurrentPosition(
+          async (pos) => {
+            isSharingBack = true;
+            receiverLat = pos.coords.latitude;
+            receiverLng = pos.coords.longitude;
+
+            // Mark receiver joined + write first location
+            await updateDoc(sessionRef, {
+              receiverJoined: true,
+              receiverJoinedAt: serverTimestamp(),
+              receiverLat: pos.coords.latitude,
+              receiverLng: pos.coords.longitude,
+              receiverAccuracy: pos.coords.accuracy,
+            });
+
+            document.getElementById("share-btn").textContent =
+              "✅ Sharing Live";
+            document.getElementById("share-btn").disabled = false;
+            document.getElementById("share-btn").className = "btn btn-outline";
+            document.getElementById("share-note").textContent =
+              "Your location is being shared in real-time";
+
+            // Watch and keep updating
+            watchId = navigator.geolocation.watchPosition(
+              async (p) => {
+                receiverLat = p.coords.latitude;
+                receiverLng = p.coords.longitude;
+                await updateDoc(sessionRef, {
+                  receiverLat: p.coords.latitude,
+                  receiverLng: p.coords.longitude,
+                  receiverAccuracy: p.coords.accuracy,
+                });
+                updateMap();
+              },
+              (err) => console.warn("GPS error:", err),
+              { enableHighAccuracy: true, maximumAge: 5000 },
+            );
+          },
+          (err) => {
+            document.getElementById("share-btn").textContent =
+              "📍 Share My Location";
+            document.getElementById("share-btn").disabled = false;
+            alert("Location access denied. Please allow location to share.");
+          },
+          { enableHighAccuracy: true, timeout: 10000 },
+        );
+      };
+
+      // ── Stop watching ─────────────────────────────────────────────────────────
+      function stopSharingLocation() {
+        if (watchId !== null) {
+          navigator.geolocation.clearWatch(watchId);
+          watchId = null;
+        }
+        isSharingBack = false;
+      }
+
+      // ── Error screen ──────────────────────────────────────────────────────────
+      function showError(msg) {
+        document.getElementById("loading").style.display = "none";
+        const e = document.getElementById("error-screen");
+        e.style.display = "flex";
+        document.getElementById("error-msg").textContent = msg;
+      }
+
+      // ── Handle loading timeout (if session never loads) ───────────────────────
+      setTimeout(() => {
+        if (document.getElementById("loading").style.display !== "none") {
+          showError(
+            "Could not load session. Check your connection and try again.",
+          );
+        }
+      }, 10000);
+    </script>
+  </body>
+</html>
