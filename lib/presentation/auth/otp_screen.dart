@@ -131,10 +131,16 @@ class _OtpScreenState extends State<OtpScreen> with TickerProviderStateMixin {
 
   @override
   void dispose() {
-    for (final c in _ctrl) c.dispose();
-    for (final f in _fn) f.dispose();
+    for (final c in _ctrl) {
+      c.dispose();
+    }
+    for (final f in _fn) {
+      f.dispose();
+    }
     _timer?.cancel();
-    for (final c in _stagger) c.dispose();
+    for (final c in _stagger) {
+      c.dispose();
+    }
     _shakeCtrl.dispose();
     _pulseCtrl.dispose();
     super.dispose();
