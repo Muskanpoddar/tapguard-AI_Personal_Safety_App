@@ -8,6 +8,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/routes/app_routes.dart';
 import '../../data/models/session_model.dart';
 import '../../data/services/session_service.dart';
+import '../../data/services/notification_service.dart'; // ← NEW
 
 class ActiveSessionScreen extends StatefulWidget {
   const ActiveSessionScreen({super.key});
@@ -19,6 +20,7 @@ class ActiveSessionScreen extends StatefulWidget {
 class _ActiveSessionScreenState extends State<ActiveSessionScreen>
     with TickerProviderStateMixin {
   final _sessionService = SessionService();
+  final _notifService = NotificationService(); // ← NEW
   final _db = FirebaseFirestore.instance;
   final _auth = FirebaseAuth.instance;
 
@@ -28,7 +30,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
   bool _isSafe = false;
 
   // Timer state
-  int _totalSeconds = 20 * 60; // user-selected duration
+  int _totalSeconds = 20 * 60;
   int _remainingSeconds = 20 * 60;
   bool _timerRunning = false;
   Timer? _countdownTimer;
@@ -84,7 +86,6 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
       setState(() => _session = active);
       _watchSession(active.sessionId);
     }
-    // Show timer picker immediately
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _showTimerPicker();
     });
@@ -197,7 +198,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
     );
   }
 
-  // ── Custom timer input ────────────────────────────────────────────────────
+  // ── Custom timer ──────────────────────────────────────────────────────────
   void _showCustomTimer() {
     int customMinutes = 30;
     showDialog(
@@ -298,9 +299,23 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
     });
   }
 
-  // ── Timer ended — vibrate + show alert ───────────────────────────────────
+  // ── Timer ended — vibrate + push notification + local alert ──────────────
   void _onTimerEnd() {
     HapticFeedback.heavyImpact();
+
+    // 1. Vibrate urgently on THIS device
+    _notifService.vibrateTimerEnd();
+
+    // 2. Send push notification to all active contacts via OneSignal
+    if (_session != null) {
+      _notifService.alertContactsTimerEnded(
+        ownerUid: _session!.ownerUid,
+        ownerName: _session!.ownerName,
+        sessionId: _session!.sessionId,
+      );
+    }
+
+    // 3. Show dialog on screen
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -335,6 +350,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
           TextButton(
             onPressed: () {
               Navigator.pop(context);
+              _notifService.stopVibration(); // stop vibration when extending
               _showTimerPicker();
             },
             child: const Text(
@@ -347,13 +363,14 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
     );
   }
 
-  // ── Format timer ──────────────────────────────────────────────────────────
   String get _timerDisplay {
     final h = _remainingSeconds ~/ 3600;
     final m = (_remainingSeconds % 3600) ~/ 60;
     final s = _remainingSeconds % 60;
     if (h > 0) {
-      return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+      return '${h.toString().padLeft(2, '0')}:'
+          '${m.toString().padLeft(2, '0')}:'
+          '${s.toString().padLeft(2, '0')}';
     }
     return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
@@ -374,6 +391,13 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
           'lastSafeAt': FieldValue.serverTimestamp(),
           'isSafe': true,
         });
+
+        // Stop vibration + notify contacts user is safe
+        _notifService.stopVibration();
+        _notifService.notifyContactsUserSafe(
+          ownerUid: _session!.ownerUid,
+          ownerName: _session!.ownerName,
+        );
       }
     } catch (_) {}
 
@@ -392,7 +416,16 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
     _countdownTimer?.cancel();
 
     try {
+      // Notify contacts session ended
+      if (_session != null) {
+        _notifService.notifySessionEnded(
+          ownerUid: _session!.ownerUid,
+          ownerName: _session!.ownerName,
+        );
+      }
+
       await _sessionService.endSession();
+
       final uid = _auth.currentUser?.uid;
       if (uid != null && _session != null) {
         final snap = await _db
@@ -409,6 +442,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
         }
       }
     } catch (_) {}
+
     _navigateHome();
   }
 
@@ -471,7 +505,6 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
         ),
         centerTitle: true,
         actions: [
-          // Settings icon
           GestureDetector(
             onTap: () => Navigator.of(context).pushNamed(AppRoutes.settings),
             child: Container(
@@ -507,7 +540,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 110),
               child: Column(
                 children: [
-                  // ── Connected badge ───────────────────────────────────────
+                  // Connected badge
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 18,
@@ -522,7 +555,6 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // Pulsing dot
                         TweenAnimationBuilder<double>(
                           tween: Tween(begin: 0.5, end: 1.0),
                           duration: const Duration(milliseconds: 800),
@@ -559,17 +591,13 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
                   ),
 
                   const SizedBox(height: 28),
-
-                  // ── Timer circle ──────────────────────────────────────────
                   _buildTimerCircle(),
-
                   const SizedBox(height: 20),
 
-                  // ── Live badge + tap to change timer ──────────────────────
+                  // Live badge + Change timer
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // Live NFC badge
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
@@ -601,10 +629,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
                           ],
                         ),
                       ),
-
                       const SizedBox(width: 10),
-
-                      // Change timer button
                       GestureDetector(
                         onTap: _showTimerPicker,
                         child: Container(
@@ -645,7 +670,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
 
                   const SizedBox(height: 24),
 
-                  // ── I am Safe ─────────────────────────────────────────────
+                  // I am Safe button
                   ScaleTransition(
                     scale: _safeScale,
                     child: GestureDetector(
@@ -735,9 +760,9 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
 
                   const SizedBox(height: 12),
 
-                  // ── End Session ───────────────────────────────────────────
+                  // End Session
                   GestureDetector(
-                    onTap: _isEnding ? null : () => _showEndConfirm(),
+                    onTap: _isEnding ? null : _showEndConfirm,
                     child: Container(
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(
@@ -810,7 +835,6 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
 
                   const SizedBox(height: 16),
 
-                  // Encryption note
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -892,7 +916,6 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
 
   // ── Timer circle ──────────────────────────────────────────────────────────
   Widget _buildTimerCircle() {
-    // Warning colors when < 20% time left
     final isLow = _timerProgress < 0.2 && _timerRunning;
     final color = _isSafe
         ? AppColors.success
@@ -906,7 +929,6 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
       child: Stack(
         alignment: Alignment.center,
         children: [
-          // Outer glow ring (animated)
           AnimatedBuilder(
             animation: _ringAnim,
             builder: (_, __) => Container(
@@ -919,7 +941,6 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
             ),
           ),
 
-          // Progress arc
           SizedBox(
             width: 220,
             height: 220,
@@ -932,7 +953,6 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
             ),
           ),
 
-          // White circle
           Container(
             width: 190,
             height: 190,
@@ -949,7 +969,6 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
             ),
           ),
 
-          // Timer text content
           Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -986,8 +1005,6 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
                   letterSpacing: 1.5,
                 ),
               ),
-
-              // Warning when low
               if (isLow && !_isSafe) ...[
                 const SizedBox(height: 6),
                 Container(
@@ -1017,7 +1034,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
     );
   }
 
-  // ── End session confirm ───────────────────────────────────────────────────
+  // ── End confirm dialog ────────────────────────────────────────────────────
   void _showEndConfirm() {
     showDialog(
       context: context,
