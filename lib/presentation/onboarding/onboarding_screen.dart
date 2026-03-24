@@ -5,9 +5,6 @@ import '../../core/constants/app_strings.dart';
 import '../../core/routes/app_routes.dart';
 import '../../data/services/auth_session_service.dart';
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  ONBOARDING SCREEN
-// ═══════════════════════════════════════════════════════════════════════════
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
 
@@ -21,14 +18,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   int _currentPage = 0;
   final int _totalPages = 3;
 
-  // Slide 1 — NFC pairing state
   bool _isPairing = false;
-  String _pairingStatus = ''; // '', 'searching', 'connected'
-
-  // Slide 3 — Privacy checkbox
+  String _pairingStatus = '';
   bool _privacyAccepted = false;
 
-  // Content fade animation
   late AnimationController _fadeController;
   late Animation<double> _fadeAnim;
 
@@ -41,12 +34,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         statusBarIconBrightness: Brightness.dark,
       ),
     );
-
     _fadeController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 450),
     )..forward();
-
     _fadeAnim = CurvedAnimation(
       parent: _fadeController,
       curve: Curves.easeIn,
@@ -63,7 +54,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   void _onPageChanged(int index) {
     setState(() {
       _currentPage = index;
-      // Reset pairing state when leaving slide 1
       if (index != 0) {
         _isPairing = false;
         _pairingStatus = '';
@@ -73,30 +63,22 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     _fadeController.forward();
   }
 
-  // ── Start Pairing button logic ────────────────────────────────────────────
   void _onStartPairing() async {
     HapticFeedback.mediumImpact();
     setState(() {
       _isPairing = true;
       _pairingStatus = 'searching';
     });
-
-    // Simulate NFC searching (2s)
     await Future.delayed(const Duration(seconds: 2));
     if (!mounted) return;
-
     setState(() => _pairingStatus = 'connected');
     HapticFeedback.heavyImpact();
-
-    // Show connected for 1.5s then go to next slide
     await Future.delayed(const Duration(milliseconds: 1500));
     if (!mounted) return;
-
     setState(() {
       _isPairing = false;
       _pairingStatus = '';
     });
-
     _pageController.nextPage(
       duration: const Duration(milliseconds: 400),
       curve: Curves.easeOutCubic,
@@ -111,7 +93,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       );
     } else {
       if (!_privacyAccepted) {
-        // Show snackbar if privacy not accepted
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text(
@@ -134,7 +115,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   Future<void> _goToAuthOrHome() async {
     final hasActiveSession = await AuthSessionService.hasActiveSession();
     if (!mounted) return;
-
     final route = hasActiveSession ? AppRoutes.home : AppRoutes.login;
     Navigator.of(context).pushReplacementNamed(route);
   }
@@ -161,7 +141,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             const SizedBox(height: 8),
             _buildPageDots(),
             const SizedBox(height: 4),
-
             Expanded(
               child: PageView(
                 controller: _pageController,
@@ -181,7 +160,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 ],
               ),
             ),
-
             _buildBottomButtons(),
             const SizedBox(height: 24),
           ],
@@ -190,7 +168,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     );
   }
 
-  // ── Top bar ───────────────────────────────────────────────────────────────
   Widget _buildTopBar() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
@@ -220,7 +197,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               ),
             ),
           ),
-
           Text(
             _currentPage == 0 ? 'ONBOARDING' : 'TapGuard',
             style: TextStyle(
@@ -233,7 +209,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               letterSpacing: _currentPage == 0 ? 1.2 : 0,
             ),
           ),
-
           GestureDetector(
             onTap: _goToAuthOrHome,
             child: Text(
@@ -251,7 +226,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     );
   }
 
-  // ── Page dots ─────────────────────────────────────────────────────────────
   Widget _buildPageDots() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -273,7 +247,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     );
   }
 
-  // ── Bottom buttons ────────────────────────────────────────────────────────
   Widget _buildBottomButtons() {
     return AnimatedBuilder(
       animation: _fadeController,
@@ -282,9 +255,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         padding: const EdgeInsets.symmetric(horizontal: 24),
         child: Column(
           children: [
-            // ── Slide 1 buttons ──────────────────────────────────────────────
             if (_currentPage == 0) ...[
-              // Start Pairing button — changes state when tapped
               SizedBox(
                 width: double.infinity,
                 height: 56,
@@ -406,8 +377,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 ],
               ),
             ],
-
-            // ── Slide 2 buttons ──────────────────────────────────────────────
             if (_currentPage == 1) ...[
               SizedBox(
                 width: double.infinity,
@@ -445,14 +414,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 ),
               ),
             ],
-
-            // ── Slide 3 buttons ──────────────────────────────────────────────
             if (_currentPage == 2) ...[
               SizedBox(
                 width: double.infinity,
                 height: 56,
                 child: ElevatedButton(
-                  // Disabled if checkbox not ticked
                   onPressed: _privacyAccepted ? _nextPage : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
@@ -498,7 +464,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     );
   }
 
-  // ── How it works bottom sheet ─────────────────────────────────────────────
   void _showHowItWorksSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -597,12 +562,14 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             ),
           ),
           const SizedBox(width: 12),
-          Text(
-            text,
-            style: const TextStyle(
-              fontFamily: 'Poppins',
-              fontSize: 14,
-              color: Color(0xFF1A1A2E),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 14,
+                color: Color(0xFF1A1A2E),
+              ),
             ),
           ),
         ],
@@ -612,7 +579,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  SLIDE 1 — NFC Pairing illustration
+//  SLIDE 1 — NFC Pairing — FIXED overflow
 // ═══════════════════════════════════════════════════════════════════════════
 class _Slide1NfcPairing extends StatefulWidget {
   final bool isPairing;
@@ -636,7 +603,6 @@ class _Slide1NfcPairingState extends State<_Slide1NfcPairing>
   @override
   void initState() {
     super.initState();
-
     _nfcPulse = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),
@@ -645,7 +611,6 @@ class _Slide1NfcPairingState extends State<_Slide1NfcPairing>
       parent: _nfcPulse,
       curve: Curves.easeInOut,
     ).drive(Tween(begin: 0.85, end: 1.18));
-
     _phoneAnim = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1400),
@@ -670,211 +635,240 @@ class _Slide1NfcPairingState extends State<_Slide1NfcPairing>
   @override
   Widget build(BuildContext context) {
     final isConnected = widget.pairingStatus == 'connected';
+    // ── FIX: use LayoutBuilder so phones scale to screen width ──────────────
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availW = constraints.maxWidth;
+        // Phone card width = 18% of screen, NFC icon = 13%
+        final phoneW = (availW * 0.18).clamp(60.0, 90.0);
+        final phoneH = phoneW * 1.75;
+        final nfcSize = (availW * 0.13).clamp(44.0, 56.0);
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Column(
-        children: [
-          // Illustration box
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 400),
-            width: double.infinity,
-            height: 270,
-            decoration: BoxDecoration(
-              color: isConnected
-                  ? const Color(0xFFE8F8EE)
-                  : const Color(0xFFEDE7FF),
-              borderRadius: BorderRadius.circular(28),
-            ),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                // Glow circle
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 400),
-                  width: 120,
-                  height: 120,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: (isConnected ? AppColors.success : AppColors.primary)
-                        .withOpacity(0.1),
-                  ),
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            children: [
+              // Illustration box — clips overflow
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 400),
+                width: double.infinity,
+                height: 270,
+                clipBehavior: Clip.hardEdge, // ← KEY FIX: clips any overflow
+                decoration: BoxDecoration(
+                  color: isConnected
+                      ? const Color(0xFFE8F8EE)
+                      : const Color(0xFFEDE7FF),
+                  borderRadius: BorderRadius.circular(28),
                 ),
-
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                child: Stack(
+                  alignment: Alignment.center,
                   children: [
-                    // Left phone
-                    AnimatedBuilder(
-                      animation: _phoneAnim,
-                      builder: (_, child) => Transform.translate(
-                        offset: Offset(
-                          widget.isPairing ? _phoneMoveL.value : 0,
-                          0,
-                        ),
-                        child: child,
-                      ),
-                      child: _PhoneCard(
-                        isPrimary: false,
-                        isConnected: isConnected,
+                    // Glow circle
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 400),
+                      width: 120,
+                      height: 120,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color:
+                            (isConnected
+                                    ? AppColors.success
+                                    : AppColors.primary)
+                                .withOpacity(0.1),
                       ),
                     ),
 
-                    const SizedBox(width: 20),
+                    // Phones + NFC icon row — uses proportional sizing
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Left phone
+                        AnimatedBuilder(
+                          animation: _phoneAnim,
+                          builder: (_, child) => Transform.translate(
+                            offset: Offset(
+                              widget.isPairing ? _phoneMoveL.value : 0,
+                              0,
+                            ),
+                            child: child,
+                          ),
+                          child: _PhoneCard(
+                            isPrimary: false,
+                            isConnected: isConnected,
+                            width: phoneW,
+                            height: phoneH,
+                          ),
+                        ),
 
-                    // NFC icon center
-                    AnimatedBuilder(
-                      animation: _nfcPulse,
-                      builder: (_, __) => Transform.scale(
-                        scale: widget.isPairing ? _nfcScale.value : 1.0,
+                        SizedBox(width: availW * 0.04),
+
+                        // NFC icon center
+                        AnimatedBuilder(
+                          animation: _nfcPulse,
+                          builder: (_, __) => Transform.scale(
+                            scale: widget.isPairing ? _nfcScale.value : 1.0,
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 400),
+                              width: nfcSize,
+                              height: nfcSize,
+                              decoration: BoxDecoration(
+                                color: isConnected
+                                    ? AppColors.success
+                                    : AppColors.primary,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color:
+                                        (isConnected
+                                                ? AppColors.success
+                                                : AppColors.primary)
+                                            .withOpacity(0.45),
+                                    blurRadius: widget.isPairing ? 20 : 10,
+                                    spreadRadius: widget.isPairing ? 5 : 2,
+                                  ),
+                                ],
+                              ),
+                              child: Icon(
+                                isConnected
+                                    ? Icons.check_rounded
+                                    : Icons.wifi_rounded,
+                                color: Colors.white,
+                                size: nfcSize * 0.48,
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        SizedBox(width: availW * 0.04),
+
+                        // Right phone
+                        AnimatedBuilder(
+                          animation: _phoneAnim,
+                          builder: (_, child) => Transform.translate(
+                            offset: Offset(
+                              widget.isPairing ? _phoneMoveR.value : 0,
+                              0,
+                            ),
+                            child: child,
+                          ),
+                          child: _PhoneCard(
+                            isPrimary: true,
+                            isConnected: isConnected,
+                            width: phoneW,
+                            height: phoneH,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    // Status badge
+                    if (widget.isPairing)
+                      Positioned(
+                        bottom: 16,
                         child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 400),
-                          width: 52,
-                          height: 52,
+                          duration: const Duration(milliseconds: 300),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 6,
+                          ),
                           decoration: BoxDecoration(
                             color: isConnected
                                 ? AppColors.success
                                 : AppColors.primary,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color:
-                                    (isConnected
-                                            ? AppColors.success
-                                            : AppColors.primary)
-                                        .withOpacity(0.45),
-                                blurRadius: widget.isPairing ? 20 : 10,
-                                spreadRadius: widget.isPairing ? 5 : 2,
+                            borderRadius: BorderRadius.circular(50),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (!isConnected)
+                                const SizedBox(
+                                  width: 12,
+                                  height: 12,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                              if (isConnected)
+                                const Icon(
+                                  Icons.check_circle_rounded,
+                                  color: Colors.white,
+                                  size: 14,
+                                ),
+                              const SizedBox(width: 6),
+                              Text(
+                                isConnected
+                                    ? 'Pairing Successful!'
+                                    : 'Searching…',
+                                style: const TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
                               ),
                             ],
                           ),
-                          child: Icon(
-                            isConnected
-                                ? Icons.check_rounded
-                                : Icons.wifi_rounded,
-                            color: Colors.white,
-                            size: 26,
-                          ),
                         ),
                       ),
-                    ),
-
-                    const SizedBox(width: 20),
-
-                    // Right phone
-                    AnimatedBuilder(
-                      animation: _phoneAnim,
-                      builder: (_, child) => Transform.translate(
-                        offset: Offset(
-                          widget.isPairing ? _phoneMoveR.value : 0,
-                          0,
-                        ),
-                        child: child,
-                      ),
-                      child: _PhoneCard(
-                        isPrimary: true,
-                        isConnected: isConnected,
-                      ),
-                    ),
                   ],
                 ),
+              ),
 
-                // Status badge at bottom of card
-                if (widget.isPairing)
-                  Positioned(
-                    bottom: 16,
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 300),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isConnected
-                            ? AppColors.success
-                            : AppColors.primary,
-                        borderRadius: BorderRadius.circular(50),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (!isConnected)
-                            const SizedBox(
-                              width: 12,
-                              height: 12,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              ),
-                            ),
-                          if (isConnected)
-                            const Icon(
-                              Icons.check_circle_rounded,
-                              color: Colors.white,
-                              size: 14,
-                            ),
-                          const SizedBox(width: 6),
-                          Text(
-                            isConnected ? 'Pairing Successful!' : 'Searching…',
-                            style: const TextStyle(
-                              fontFamily: 'Poppins',
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+              const SizedBox(height: 28),
+
+              const Text(
+                AppStrings.onboarding1Title,
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 26,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF1A1A2E),
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              Text(
+                AppStrings.onboarding1Body,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 14,
+                  color: Colors.grey.shade600,
+                  height: 1.65,
+                ),
+              ),
+            ],
           ),
-
-          const SizedBox(height: 28),
-
-          const Text(
-            AppStrings.onboarding1Title,
-            style: TextStyle(
-              fontFamily: 'Poppins',
-              fontSize: 26,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF1A1A2E),
-            ),
-          ),
-
-          const SizedBox(height: 12),
-
-          Text(
-            AppStrings.onboarding1Body,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontFamily: 'Poppins',
-              fontSize: 14,
-              color: Colors.grey.shade600,
-              height: 1.65,
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
 
-// ── Phone card widget ──────────────────────────────────────────────────────
+// ── Phone card widget — now accepts width/height ───────────────────────────
 class _PhoneCard extends StatelessWidget {
   final bool isPrimary;
   final bool isConnected;
-  const _PhoneCard({required this.isPrimary, this.isConnected = false});
+  final double width;
+  final double height;
+  const _PhoneCard({
+    required this.isPrimary,
+    this.isConnected = false,
+    required this.width,
+    required this.height,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 82,
-      height: 145,
+      width: width,
+      height: height,
       decoration: BoxDecoration(
         color: isPrimary ? Colors.white : Colors.white.withOpacity(0.85),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         border: isPrimary
             ? Border.all(
                 color: isConnected ? AppColors.success : AppColors.primary,
@@ -892,8 +886,8 @@ class _PhoneCard extends StatelessWidget {
       ),
       child: Center(
         child: Container(
-          width: 36,
-          height: 36,
+          width: width * 0.44,
+          height: width * 0.44,
           decoration: BoxDecoration(
             color: isPrimary
                 ? (isConnected ? AppColors.success : AppColors.primary)
@@ -903,7 +897,7 @@ class _PhoneCard extends StatelessWidget {
           child: Icon(
             isPrimary ? Icons.phone_android_rounded : Icons.smartphone_rounded,
             color: isPrimary ? Colors.white : AppColors.primary,
-            size: 20,
+            size: width * 0.26,
           ),
         ),
       ),
@@ -953,6 +947,7 @@ class _Slide2BiDirectionalState extends State<_Slide2BiDirectional>
           Container(
             width: double.infinity,
             height: 260,
+            clipBehavior: Clip.hardEdge, // ← FIX overflow
             decoration: BoxDecoration(
               color: const Color(0xFFEDE7FF),
               borderRadius: BorderRadius.circular(28),
@@ -968,7 +963,6 @@ class _Slide2BiDirectionalState extends State<_Slide2BiDirectional>
                     color: AppColors.primary.withOpacity(0.07),
                   ),
                 ),
-                // Floating dots
                 Positioned(
                   top: 40,
                   right: 62,
@@ -979,12 +973,10 @@ class _Slide2BiDirectionalState extends State<_Slide2BiDirectional>
                   left: 58,
                   child: _dot(size: 10, opacity: 0.35),
                 ),
-
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     _iconBox(Icons.location_on_rounded),
-                    // Line + center icon
                     Stack(
                       alignment: Alignment.center,
                       children: [
@@ -1118,7 +1110,7 @@ class _Slide2BiDirectionalState extends State<_Slide2BiDirectional>
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  SLIDE 3 — Privacy First (with working checkbox)
+//  SLIDE 3 — Privacy First
 // ═══════════════════════════════════════════════════════════════════════════
 class _Slide3PrivacyFirst extends StatefulWidget {
   final bool accepted;
@@ -1158,10 +1150,10 @@ class _Slide3PrivacyFirstState extends State<_Slide3PrivacyFirst>
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         children: [
-          // Illustration
           Container(
             width: double.infinity,
             height: 240,
+            clipBehavior: Clip.hardEdge, // ← FIX overflow
             decoration: BoxDecoration(
               color: const Color(0xFFEDE7FF),
               borderRadius: BorderRadius.circular(28),
@@ -1177,12 +1169,8 @@ class _Slide3PrivacyFirstState extends State<_Slide3PrivacyFirst>
                     color: AppColors.primary.withOpacity(0.07),
                   ),
                 ),
-
-                // NFC dots
                 Positioned(top: 50, right: 65, child: _nfcDot()),
                 Positioned(bottom: 60, left: 60, child: _nfcDot()),
-
-                // Pulsing shield
                 AnimatedBuilder(
                   animation: _shieldPulse,
                   builder: (_, __) => Transform.scale(
@@ -1209,8 +1197,6 @@ class _Slide3PrivacyFirstState extends State<_Slide3PrivacyFirst>
                     ),
                   ),
                 ),
-
-                // Toggle pill
                 Positioned(
                   bottom: 44,
                   child: Container(
@@ -1293,7 +1279,6 @@ class _Slide3PrivacyFirstState extends State<_Slide3PrivacyFirst>
 
           const SizedBox(height: 20),
 
-          // ── Working checkbox ─────────────────────────────────────────────
           GestureDetector(
             onTap: () {
               HapticFeedback.lightImpact();
@@ -1315,7 +1300,6 @@ class _Slide3PrivacyFirstState extends State<_Slide3PrivacyFirst>
               ),
               child: Row(
                 children: [
-                  // Custom animated checkbox
                   AnimatedContainer(
                     duration: const Duration(milliseconds: 250),
                     width: 24,
@@ -1340,9 +1324,7 @@ class _Slide3PrivacyFirstState extends State<_Slide3PrivacyFirst>
                           )
                         : null,
                   ),
-
                   const SizedBox(width: 12),
-
                   Expanded(
                     child: RichText(
                       text: TextSpan(
@@ -1378,7 +1360,6 @@ class _Slide3PrivacyFirstState extends State<_Slide3PrivacyFirst>
               ),
             ),
           ),
-
           const SizedBox(height: 16),
         ],
       ),
@@ -1412,13 +1393,15 @@ class _Slide3PrivacyFirstState extends State<_Slide3PrivacyFirst>
             child: Icon(icon, color: AppColors.primary, size: 18),
           ),
           const SizedBox(width: 14),
-          Text(
-            text,
-            style: const TextStyle(
-              fontFamily: 'Poppins',
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              color: Color(0xFF1A1A2E),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF1A1A2E),
+              ),
             ),
           ),
         ],
@@ -1439,3 +1422,4 @@ class _Slide3PrivacyFirstState extends State<_Slide3PrivacyFirst>
     );
   }
 }
+ 
