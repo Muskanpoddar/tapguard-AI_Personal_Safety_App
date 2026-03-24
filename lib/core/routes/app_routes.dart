@@ -13,6 +13,8 @@ import '../../presentation/auth/profile_setup_screen.dart';
 import '../../presentation/home/home_screen.dart';
 // NFC Pairing
 import '../../presentation/nfc_pairing/nfc_pairing_screen.dart';
+// QR Pairing  ← NEW
+import '../../presentation/qr_pairing/qr_pairing_screen.dart';
 // Session
 import '../../presentation/session/active_session_screen.dart';
 // Map
@@ -40,6 +42,7 @@ class AppRoutes {
   static const String profileSetup   = '/profile-setup';
   static const String home           = '/home';
   static const String nfcPairing     = '/nfc-pairing';
+  static const String qrPairing      = '/qr-pairing';   // ← NEW
   static const String activeSession  = '/active-session';
   static const String liveMap        = '/live-map';
   static const String sos            = '/sos';
@@ -63,7 +66,6 @@ class AppRoutes {
         return _slide(const LoginScreen(), routeSettings);
 
       case otp:
-        // LoginScreen passes: arguments: {'email': email}
         final args  = routeSettings.arguments as Map<String, String>? ?? {};
         final email = args['email'] ?? '';
         return _slide(OtpScreen(email: email), routeSettings);
@@ -76,6 +78,9 @@ class AppRoutes {
 
       case nfcPairing:
         return _slide(const NfcPairingScreen(), routeSettings);
+
+      case qrPairing:                                        // ← NEW
+        return _slide(const QrPairingScreen(), routeSettings);
 
       case activeSession:
         return _slide(const ActiveSessionScreen(), routeSettings);
