@@ -32,6 +32,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../../core/constants/app_colors.dart';
@@ -286,24 +287,28 @@ class _QrPairingScreenState extends State<QrPairingScreen>
 
   // Phone B streams its GPS into the session doc as receiverLat/receiverLng
   void _startReceiverGpsStream(String sessionId) {
-    // Using geolocator directly here to avoid conflicting with SessionService
-    // which manages Phone A's stream. This keeps concerns separated.
-    // Import geolocator at top if not already present.
-    // ignore: unused_local_variable
-    // Full GPS stream implementation would go here — omitted to keep file
-    // concise. The pattern is identical to SessionService._startOwnerStream()
-    // but writes to receiverLat / receiverLng fields.
-    //
-    // Example:
-    // Geolocator.getPositionStream(...).listen((pos) {
-    //   _db.collection('sessions').doc(sessionId).update({
-    //     'receiverLat': pos.latitude,
-    //     'receiverLng': pos.longitude,
-    //     'receiverAccuracy': pos.accuracy,
-    //     'updatedAt': FieldValue.serverTimestamp(),
-    //   });
-    // });
+    _gpsSub?.cancel();
+    _gpsSub = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 5,
+      ),
+    ).listen(
+      (pos) async {
+        await _db.collection('sessions').doc(sessionId).update({
+          'receiverLat': pos.latitude,
+          'receiverLng': pos.longitude,
+          'receiverAccuracy': pos.accuracy,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      },
+      onError: (e) {
+        debugPrint('Receiver GPS stream error: $e');
+      },
+    );
   }
+
+  StreamSubscription<Position>? _gpsSub;
 
   // ── Save contact to Firestore (shared by both phones) ─────────────────────
   // isOwner = true  → Phone A saves Phone B (receiver) as contact
@@ -396,6 +401,7 @@ class _QrPairingScreenState extends State<QrPairingScreen>
     _statusSub?.cancel();
     _errorSub?.cancel();
     _receiverSub?.cancel();
+    _gpsSub?.cancel();
     _cameraCtrl?.dispose();
     _pulseCtrl.dispose();
     _scanLineCtrl.dispose();
