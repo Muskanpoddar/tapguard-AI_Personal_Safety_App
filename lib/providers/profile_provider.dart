@@ -80,6 +80,7 @@ class ProfileService {
     required String contactName,
     required String contactPhone,
     required bool isEmergency,
+    int priority = 3,
   }) async {
     try {
       final currentUser = _auth.currentUser;
@@ -90,6 +91,7 @@ class ProfileService {
         phoneNumber: contactPhone,
         name: contactName,
         isEmergencyContact: isEmergency,
+        priority: priority,
         addedAt: DateTime.now(),
         addedByUid: currentUser.uid,
       );
