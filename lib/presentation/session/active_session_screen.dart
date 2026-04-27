@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/routes/app_routes.dart';
 import '../../data/models/session_model.dart';
@@ -1084,8 +1085,8 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
   Widget _buildBottomNav() {
     final tabs = [
       {'icon': Icons.home_rounded, 'label': 'Home'},
+      {'icon': Icons.map_rounded, 'label': 'Map'},
       {'icon': Icons.timer_rounded, 'label': 'Sessions'},
-      {'icon': Icons.shield_rounded, 'label': 'Safety'},
       {'icon': Icons.person_rounded, 'label': 'Profile'},
     ];
     return Container(
@@ -1103,11 +1104,12 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: List.generate(tabs.length, (i) {
-          final sel = i == 1;
+          final sel = i == 2;
           return GestureDetector(
             onTap: () {
               HapticFeedback.lightImpact();
               if (i == 0) _navigateHome();
+              if (i == 1) Navigator.of(context).pushNamed(AppRoutes.liveMap);
             },
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
