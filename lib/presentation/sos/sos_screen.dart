@@ -18,6 +18,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:vibration/vibration.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/routes/app_routes.dart';
@@ -146,11 +148,6 @@ class _SosScreenState extends State<SosScreen>
     });
   }
 
-  void _cancelCountdown() {
-    _countdownTimer?.cancel();
-    if (mounted) Navigator.of(context).pop();
-  }
-
   // ── TRIGGER SOS ─────────────────────────────────────────────────────────────
   Future<void> _triggerSos({required bool fromRisk}) async {
     if (_sendingAlert) return;
@@ -197,34 +194,102 @@ class _SosScreenState extends State<SosScreen>
 
     // Get user's name
     String name = 'User';
+    double? lat;
+    double? lng;
     try {
       final doc = await _db.collection('users').doc(uid).get();
       name = doc.data()?['name'] ?? name;
     } catch (_) {}
 
-    // Get trusted contacts
-    final contacts = await _db
+    // Get current location for SMS
+    try {
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+      );
+      lat = pos.latitude;
+      lng = pos.longitude;
+    } catch (_) {}
+
+    // Build location link
+    final locationLink = (lat != null && lng != null)
+        ? ' Location: https://maps.google.com/?q=$lat,$lng'
+        : '';
+
+    // Get trusted contacts sorted by priority (1 = highest)
+    final contactsSnap = await _db
         .collection('users')
         .doc(uid)
-        .collection('contacts')
+        .collection('trustedContacts')
+        .orderBy('priority', descending: false) // lower number = higher priority
         .get();
 
-    for (final doc in contacts.docs) {
-      try {
-        await _db
-            .collection('users')
-            .doc(doc.id)
-            .collection('notifications')
-            .add({
-          'type':      'sos_alert',
-          'fromUid':   uid,
-          'fromName':  name,
-          'message':   'SOS ALERT! $name needs help immediately.',
-          'createdAt': FieldValue.serverTimestamp(),
-          'read':      false,
-        });
-      } catch (_) {}
+    if (contactsSnap.docs.isEmpty) {
+      // Try old 'contacts' path for backward compat
+      final oldContacts = await _db
+          .collection('users')
+          .doc(uid)
+          .collection('contacts')
+          .get();
+      for (final doc in oldContacts.docs) {
+        final phone = doc.data()['phone'] as String? ?? doc.data()['phoneNumber'] as String? ?? '';
+        if (phone.isNotEmpty) {
+          await _sendSms(phone, 'SOS ALERT! $name needs help immediately.$locationLink');
+          await _writeNotification(doc.id, uid, name);
+        }
+      }
+      return;
     }
+
+    for (final doc in contactsSnap.docs) {
+      final phone = doc.data()['phoneNumber'] as String? ?? '';
+      final contactName = doc.data()['name'] as String? ?? 'Contact';
+      final priority = doc.data()['priority'] as int? ?? 99;
+
+      // Send SMS to this contact
+      if (phone.isNotEmpty) {
+        await _sendSms(phone, 'SOS ALERT! $name needs help immediately.$locationLink');
+      }
+
+      // Write to their Firestore notifications
+      if (phone.isNotEmpty || doc.id.isNotEmpty) {
+        await _writeNotification(doc.id, uid, name);
+      }
+
+      // Log priority dispatch
+      debugPrint('SOS dispatched to $contactName (priority $priority)');
+    }
+  }
+
+  Future<void> _sendSms(String phone, String message) async {
+    try {
+      final smsUri = Uri(
+        scheme: 'sms',
+        path: phone,
+        queryParameters: {'body': message},
+      );
+      if (await canLaunchUrl(smsUri)) {
+        await launchUrl(smsUri);
+      }
+    } catch (e) {
+      debugPrint('SMS launch error: $e');
+    }
+  }
+
+  Future<void> _writeNotification(String contactUid, String fromUid, String fromName) async {
+    try {
+      await _db
+          .collection('users')
+          .doc(contactUid)
+          .collection('notifications')
+          .add({
+        'type':      'sos_alert',
+        'fromUid':   fromUid,
+        'fromName':  fromName,
+        'message':   'SOS ALERT! $fromName needs help immediately.',
+        'createdAt': FieldValue.serverTimestamp(),
+        'read':      false,
+      });
+    } catch (_) {}
   }
 
   void _startFlashEffect() {
