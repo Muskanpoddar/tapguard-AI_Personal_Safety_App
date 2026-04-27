@@ -256,10 +256,12 @@ class _QrPairingScreenState extends State<QrPairingScreen>
 
       final ownerUid = data['ownerUid'] as String? ?? '';
 
-      // Update session: receiver joined
+      // Update session: receiver joined — write BOTH UID and name
+      final myName = _auth.currentUser?.displayName ?? 'Contact';
       await _db.collection('sessions').doc(sessionId).update({
         'receiverJoined': true,
         'receiverUid': uid,
+        'receiverName': myName,
         'receiverJoinedAt': FieldValue.serverTimestamp(),
       });
 
