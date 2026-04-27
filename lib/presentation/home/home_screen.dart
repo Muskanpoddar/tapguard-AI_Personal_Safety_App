@@ -369,7 +369,7 @@ class _HomeScreenState extends State<HomeScreen>
               width: 38,
               height: 38,
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.12),
+                color: AppColors.primary.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Icon(
@@ -399,7 +399,7 @@ class _HomeScreenState extends State<HomeScreen>
               duration: const Duration(milliseconds: 400),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
               decoration: BoxDecoration(
-                color: _status.color.withOpacity(0.12),
+                color: _status.color.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(50),
               ),
               child: Row(
@@ -449,7 +449,7 @@ class _HomeScreenState extends State<HomeScreen>
         width: 8,
         height: 8,
         decoration: BoxDecoration(
-          color: color.withOpacity(v),
+          color: color.withValues(alpha: v),
           shape: BoxShape.circle,
         ),
       ),
@@ -465,7 +465,7 @@ class _HomeScreenState extends State<HomeScreen>
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 16,
             offset: const Offset(0, 4),
           ),
@@ -577,6 +577,17 @@ class _HomeScreenState extends State<HomeScreen>
       const SizedBox(width: 12),
       Expanded(
         child: _actionCard(
+          icon: Icons.security_rounded,
+          bg: const Color(0xFFDCFCE7),
+          fg: AppColors.success,
+          title: 'Safety Status',
+          sub: 'Check in',
+          onTap: () => Navigator.of(context).pushNamed(AppRoutes.safetyStatus),
+        ),
+      ),
+      const SizedBox(width: 12),
+      Expanded(
+        child: _actionCard(
           icon: Icons.timer_rounded,
           bg: const Color(0xFFFEF3C7),
           fg: const Color(0xFFD97706),
@@ -604,7 +615,7 @@ class _HomeScreenState extends State<HomeScreen>
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 12,
             offset: const Offset(0, 2),
           ),
@@ -665,7 +676,7 @@ class _HomeScreenState extends State<HomeScreen>
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.1),
+                color: AppColors.primary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(50),
               ),
               child: Text(
@@ -705,7 +716,7 @@ class _HomeScreenState extends State<HomeScreen>
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: AppColors.primary.withOpacity(0.15),
+          color: AppColors.primary.withValues(alpha: 0.15),
           width: 1.5,
         ),
       ),
@@ -713,7 +724,7 @@ class _HomeScreenState extends State<HomeScreen>
         children: [
           Icon(
             Icons.people_outline_rounded,
-            color: AppColors.primary.withOpacity(0.4),
+            color: AppColors.primary.withValues(alpha: 0.4),
             size: 40,
           ),
           const SizedBox(height: 12),
@@ -728,7 +739,7 @@ class _HomeScreenState extends State<HomeScreen>
           ),
           const SizedBox(height: 6),
           Text(
-            'Pair with a friend via NFC to add\nthem to your safety circle.',
+            'Pair with a trusted contact via NFC or QR\nto add them to your safety circle.',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontFamily: 'Poppins',
@@ -740,17 +751,17 @@ class _HomeScreenState extends State<HomeScreen>
           const SizedBox(height: 14),
           TextButton(
             onPressed: () =>
-                Navigator.of(context).pushNamed(AppRoutes.nfcPairing),
+                Navigator.of(context).pushNamed(AppRoutes.qrPairing),
             style: TextButton.styleFrom(
               foregroundColor: AppColors.primary,
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              backgroundColor: AppColors.primary.withOpacity(0.08),
+              backgroundColor: AppColors.primary.withValues(alpha: 0.08),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
             child: const Text(
-              'Pair Someone Now',
+              'Add Contact',
               style: TextStyle(
                 fontFamily: 'Poppins',
                 fontSize: 13,
@@ -771,7 +782,7 @@ class _HomeScreenState extends State<HomeScreen>
       borderRadius: BorderRadius.circular(14),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withOpacity(0.03),
+          color: Colors.black.withValues(alpha: 0.03),
           blurRadius: 8,
           offset: const Offset(0, 2),
         ),
@@ -783,7 +794,7 @@ class _HomeScreenState extends State<HomeScreen>
           children: [
             CircleAvatar(
               radius: 22,
-              backgroundColor: AppColors.primary.withOpacity(0.12),
+              backgroundColor: AppColors.primary.withValues(alpha: 0.12),
               child: Text(
                 c.name[0].toUpperCase(),
                 style: const TextStyle(
@@ -896,7 +907,7 @@ class _HomeScreenState extends State<HomeScreen>
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
-            color: AppColors.sos.withOpacity(0.45),
+            color: AppColors.sos.withValues(alpha: 0.45),
             blurRadius: 16,
             spreadRadius: 2,
             offset: const Offset(0, 4),
@@ -925,7 +936,7 @@ class _HomeScreenState extends State<HomeScreen>
   Widget _bottomNav() {
     final tabs = [
       {'icon': Icons.home_rounded, 'label': 'Home'},
-      {'icon': Icons.map_rounded, 'label': 'Map'},
+      {'icon': Icons.link_rounded, 'label': 'Sessions'},
       {'icon': Icons.people_rounded, 'label': 'Contacts'},
       {'icon': Icons.settings_rounded, 'label': 'Settings'},
     ];
@@ -935,7 +946,7 @@ class _HomeScreenState extends State<HomeScreen>
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.07),
+            color: Colors.black.withValues(alpha: 0.07),
             blurRadius: 20,
             offset: const Offset(0, -4),
           ),
@@ -951,7 +962,7 @@ class _HomeScreenState extends State<HomeScreen>
               HapticFeedback.lightImpact();
               switch (i) {
                 case 1:
-                  Navigator.of(context).pushNamed(AppRoutes.liveMap);
+                  Navigator.of(context).pushNamed(AppRoutes.activeSession);
                   break;
                 case 2:
                   Navigator.of(context).pushNamed(AppRoutes.profile);
@@ -1020,12 +1031,12 @@ class _PairingOptionCard extends StatelessWidget {
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: isEnabled
-              ? badgeColor.withOpacity(0.06)
+              ? badgeColor.withValues(alpha: 0.06)
               : Colors.grey.shade100,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isEnabled
-                ? badgeColor.withOpacity(0.30)
+                ? badgeColor.withValues(alpha: 0.30)
                 : Colors.grey.shade200,
             width: 1.5,
           ),
@@ -1042,7 +1053,7 @@ class _PairingOptionCard extends StatelessWidget {
                   height: 40,
                   decoration: BoxDecoration(
                     color: isEnabled
-                        ? badgeColor.withOpacity(0.12)
+                        ? badgeColor.withValues(alpha: 0.12)
                         : Colors.grey.shade200,
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -1057,7 +1068,7 @@ class _PairingOptionCard extends StatelessWidget {
                       const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                   decoration: BoxDecoration(
                     color: isEnabled
-                        ? badgeColor.withOpacity(0.12)
+                        ? badgeColor.withValues(alpha: 0.12)
                         : Colors.grey.shade200,
                     borderRadius: BorderRadius.circular(6),
                   ),
