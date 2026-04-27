@@ -14,6 +14,8 @@
 //   Taps "I AM SAFE" → sends Firestore notification to paired contacts
 //   Risk detection service records interaction → resets inactivity timer
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
@@ -30,6 +32,7 @@ class SafetyStatusScreen extends StatefulWidget {
 class _SafetyStatusScreenState extends State<SafetyStatusScreen>
     with SingleTickerProviderStateMixin {
   final _risk  = RiskDetectionService();
+  StreamSubscription<RiskResult>? _riskSub;
 
   RiskLevel  _riskLevel   = RiskLevel.low;
   double     _riskScore   = 0.0;
@@ -73,24 +76,29 @@ class _SafetyStatusScreenState extends State<SafetyStatusScreen>
   }
 
   void _listenRisk() {
-    _risk.riskStream.listen((result) {
+    _riskSub = _risk.riskStream.listen((result) {
       if (!mounted) return;
       setState(() {
         _riskLevel = result.level;
         _riskScore = result.score;
       });
+      // Auto-reset confirmed state when risk drops back to low
+      if (_confirmed && result.level == RiskLevel.low) {
+        setState(() => _confirmed = false);
+      }
     });
   }
 
   @override
   void dispose() {
     _pulseCtrl.dispose();
+    _riskSub?.cancel();
     _risk.stopMonitoring();
     super.dispose();
   }
 
   Future<void> _onSafeConfirm() async {
-    if (_confirming) return;
+    if (_confirming || _confirmed) return;
     setState(() => _confirming = true);
     HapticFeedback.heavyImpact();
 
@@ -101,9 +109,7 @@ class _SafetyStatusScreenState extends State<SafetyStatusScreen>
       _confirmed   = true;
       _confirming  = false;
     });
-
-    await Future.delayed(const Duration(seconds: 3));
-    if (mounted) setState(() => _confirmed = false);
+    // Confirmed state stays until risk level drops back to low
   }
 
   Color get _riskColor {
