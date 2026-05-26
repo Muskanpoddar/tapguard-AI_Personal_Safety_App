@@ -126,7 +126,7 @@ class _PrivacyPermissionsScreenState extends State<PrivacyPermissionsScreen> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 8, offset: const Offset(0, 2))],
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha:0.06), blurRadius: 8, offset: const Offset(0, 2))],
         ),
         child: const Icon(Icons.arrow_back_ios_new_rounded, size: 16, color: Color(0xFF1A1A2E)),
       ),
@@ -215,15 +215,15 @@ class _PrivacyPermissionsScreenState extends State<PrivacyPermissionsScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.primary.withOpacity(0.08),
+        color: AppColors.primary.withValues(alpha:0.08),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+        border: Border.all(color: AppColors.primary.withValues(alpha:0.2)),
       ),
       child: Row(
         children: [
           Container(
             width: 48, height: 48,
-            decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.12), borderRadius: BorderRadius.circular(14)),
+            decoration: BoxDecoration(color: AppColors.primary.withValues(alpha:0.12), borderRadius: BorderRadius.circular(14)),
             child: const Icon(Icons.shield_rounded, color: AppColors.primary, size: 24),
           ),
           const SizedBox(width: 14),
@@ -267,13 +267,13 @@ class _PrivacyPermissionsScreenState extends State<PrivacyPermissionsScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 2))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha:0.04), blurRadius: 10, offset: const Offset(0, 2))],
       ),
       child: Row(
         children: [
           Container(
             width: 44, height: 44,
-            decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.10), borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(color: AppColors.primary.withValues(alpha:0.10), borderRadius: BorderRadius.circular(12)),
             child: Icon(icon, color: AppColors.primary, size: 22),
           ),
           const SizedBox(width: 14),
@@ -290,7 +290,7 @@ class _PrivacyPermissionsScreenState extends State<PrivacyPermissionsScreen> {
           Switch(
             value: value,
             onChanged: onChanged,
-            activeColor: AppColors.primary,
+            activeThumbColor: AppColors.primary,
           ),
         ],
       ),
@@ -310,7 +310,7 @@ class _PrivacyPermissionsScreenState extends State<PrivacyPermissionsScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 2))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha:0.04), blurRadius: 10, offset: const Offset(0, 2))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -319,7 +319,7 @@ class _PrivacyPermissionsScreenState extends State<PrivacyPermissionsScreen> {
             children: [
               Container(
                 width: 44, height: 44,
-                decoration: BoxDecoration(color: AppColors.warning.withOpacity(0.10), borderRadius: BorderRadius.circular(12)),
+                decoration: BoxDecoration(color: AppColors.warning.withValues(alpha:0.10), borderRadius: BorderRadius.circular(12)),
                 child: const Icon(Icons.timer_rounded, color: AppColors.warning, size: 22),
               ),
               const SizedBox(width: 14),
@@ -352,7 +352,7 @@ class _PrivacyPermissionsScreenState extends State<PrivacyPermissionsScreen> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                   decoration: BoxDecoration(
-                    color: selected ? AppColors.warning.withOpacity(0.12) : Colors.grey.shade100,
+                    color: selected ? AppColors.warning.withValues(alpha:0.12) : Colors.grey.shade100,
                     borderRadius: BorderRadius.circular(50),
                     border: Border.all(color: selected ? AppColors.warning : Colors.transparent),
                   ),
@@ -385,7 +385,7 @@ class _PrivacyPermissionsScreenState extends State<PrivacyPermissionsScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 2))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha:0.04), blurRadius: 10, offset: const Offset(0, 2))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -394,7 +394,7 @@ class _PrivacyPermissionsScreenState extends State<PrivacyPermissionsScreen> {
             children: [
               Container(
                 width: 44, height: 44,
-                decoration: BoxDecoration(color: AppColors.info.withOpacity(0.10), borderRadius: BorderRadius.circular(12)),
+                decoration: BoxDecoration(color: AppColors.info.withValues(alpha:0.10), borderRadius: BorderRadius.circular(12)),
                 child: const Icon(Icons.gps_fixed_rounded, color: AppColors.info, size: 22),
               ),
               const SizedBox(width: 14),
@@ -420,7 +420,7 @@ class _PrivacyPermissionsScreenState extends State<PrivacyPermissionsScreen> {
                   margin: const EdgeInsets.only(right: 8),
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                   decoration: BoxDecoration(
-                    color: selected ? AppColors.info.withOpacity(0.12) : Colors.grey.shade100,
+                    color: selected ? AppColors.info.withValues(alpha:0.12) : Colors.grey.shade100,
                     borderRadius: BorderRadius.circular(50),
                     border: Border.all(color: selected ? AppColors.info : Colors.transparent),
                   ),
@@ -448,7 +448,7 @@ class _PrivacyPermissionsScreenState extends State<PrivacyPermissionsScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 2))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha:0.04), blurRadius: 10, offset: const Offset(0, 2))],
       ),
       child: Column(
         children: [
@@ -471,7 +471,7 @@ class _PrivacyPermissionsScreenState extends State<PrivacyPermissionsScreen> {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 12),
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.06),
+                color: AppColors.primary.withValues(alpha:0.06),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Center(
