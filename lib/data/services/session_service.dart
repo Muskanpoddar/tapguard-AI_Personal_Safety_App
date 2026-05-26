@@ -15,6 +15,7 @@ class SessionService {
 
   SessionModel? _active;
   StreamSubscription<Position>? _gpsSub;
+  StreamSubscription<Position>? _receiverGpsSub;
   Timer? _timeout;
 
   final _ctrl = StreamController<SessionModel?>.broadcast();
@@ -98,6 +99,30 @@ class SessionService {
         });
   }
 
+  // ── Stream Phone B GPS → receiverLat/receiverLng in Firestore ──────────
+  void startReceiverStream(String sessionId) {
+    _receiverGpsSub?.cancel();
+    _receiverGpsSub =
+        Geolocator.getPositionStream(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            distanceFilter: 5,
+          ),
+        ).listen((pos) async {
+          await _db.collection('sessions').doc(sessionId).update({
+            'receiverLat': pos.latitude,
+            'receiverLng': pos.longitude,
+            'receiverAccuracy': pos.accuracy,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        });
+  }
+
+  void stopReceiverStream() {
+    _receiverGpsSub?.cancel();
+    _receiverGpsSub = null;
+  }
+
   // ── Watch full session (both locations) — used by map/session screens ─────
   Stream<SessionModel?> watchSession(String sessionId) {
     return _db
@@ -111,6 +136,7 @@ class SessionService {
   Future<void> endSession() async {
     if (_active == null) return;
     _gpsSub?.cancel();
+    _receiverGpsSub?.cancel();
     _timeout?.cancel();
     await _db.collection('sessions').doc(_active!.sessionId).update({
       'isActive': false,
@@ -135,12 +161,15 @@ class SessionService {
       throw Exception('Location permanently denied. Enable in Settings.');
     }
     return Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.high,
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+      ),
     );
   }
 
   void dispose() {
     _gpsSub?.cancel();
+    _receiverGpsSub?.cancel();
     _timeout?.cancel();
     _ctrl.close();
   }
