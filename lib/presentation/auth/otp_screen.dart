@@ -314,7 +314,7 @@ class _OtpScreenState extends State<OtpScreen> with TickerProviderStateMixin {
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.06),
+              color: Colors.black.withValues(alpha:0.06),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -333,7 +333,7 @@ class _OtpScreenState extends State<OtpScreen> with TickerProviderStateMixin {
     width: 80,
     height: 80,
     decoration: BoxDecoration(
-      color: AppColors.primary.withOpacity(0.1),
+      color: AppColors.primary.withValues(alpha:0.1),
       shape: BoxShape.circle,
     ),
     child: const Icon(
@@ -375,7 +375,7 @@ class _OtpScreenState extends State<OtpScreen> with TickerProviderStateMixin {
       borderRadius: BorderRadius.circular(24),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withOpacity(0.06),
+          color: Colors.black.withValues(alpha:0.06),
           blurRadius: 24,
           offset: const Offset(0, 6),
         ),
@@ -419,7 +419,7 @@ class _OtpScreenState extends State<OtpScreen> with TickerProviderStateMixin {
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
               elevation: 0,
-              disabledBackgroundColor: AppColors.primary.withOpacity(0.35),
+              disabledBackgroundColor: AppColors.primary.withValues(alpha:0.35),
               disabledForegroundColor: Colors.white70,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
@@ -475,7 +475,7 @@ class _OtpScreenState extends State<OtpScreen> with TickerProviderStateMixin {
         decoration: InputDecoration(
           filled: true,
           fillColor: filled
-              ? AppColors.primary.withOpacity(0.08)
+              ? AppColors.primary.withValues(alpha:0.08)
               : const Color(0xFFF0EFF5),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
@@ -485,7 +485,7 @@ class _OtpScreenState extends State<OtpScreen> with TickerProviderStateMixin {
             borderRadius: BorderRadius.circular(14),
             borderSide: BorderSide(
               color: filled
-                  ? AppColors.primary.withOpacity(0.4)
+                  ? AppColors.primary.withValues(alpha:0.4)
                   : Colors.transparent,
               width: 1.5,
             ),
@@ -547,7 +547,7 @@ class _OtpScreenState extends State<OtpScreen> with TickerProviderStateMixin {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: AppColors.success.withOpacity(0.18),
+            color: AppColors.success.withValues(alpha:0.18),
             blurRadius: 32,
             offset: const Offset(0, 8),
           ),
@@ -559,7 +559,7 @@ class _OtpScreenState extends State<OtpScreen> with TickerProviderStateMixin {
             width: 80,
             height: 80,
             decoration: BoxDecoration(
-              color: AppColors.success.withOpacity(0.12),
+              color: AppColors.success.withValues(alpha:0.12),
               shape: BoxShape.circle,
             ),
             child: const Icon(
