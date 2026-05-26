@@ -142,7 +142,7 @@ class _SafetyStatusScreenState extends State<SafetyStatusScreen>
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
-              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 8, offset: const Offset(0, 2))],
+              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha:0.06), blurRadius: 8, offset: const Offset(0, 2))],
             ),
             child: const Icon(Icons.arrow_back_ios_new_rounded, size: 16, color: Color(0xFF1A1A2E)),
           ),
@@ -182,7 +182,7 @@ class _SafetyStatusScreenState extends State<SafetyStatusScreen>
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 12, offset: const Offset(0, 4))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha:0.04), blurRadius: 12, offset: const Offset(0, 4))],
       ),
       child: Column(
         children: [
@@ -190,7 +190,7 @@ class _SafetyStatusScreenState extends State<SafetyStatusScreen>
             children: [
               Container(
                 width: 50, height: 50,
-                decoration: BoxDecoration(color: _riskColor.withOpacity(0.10), borderRadius: BorderRadius.circular(14)),
+                decoration: BoxDecoration(color: _riskColor.withValues(alpha:0.10), borderRadius: BorderRadius.circular(14)),
                 child: Icon(Icons.security_rounded, color: _riskColor, size: 26),
               ),
               const SizedBox(width: 14),
@@ -206,9 +206,9 @@ class _SafetyStatusScreenState extends State<SafetyStatusScreen>
               ),
               AnimatedBuilder(
                 animation: _pulseCtrl,
-                builder: (_, __) => Container(
+                builder: (_, _) => Container(
                   width: 12, height: 12,
-                  decoration: BoxDecoration(shape: BoxShape.circle, color: _riskColor.withOpacity(0.5 + _pulseCtrl.value * 0.5)),
+                  decoration: BoxDecoration(shape: BoxShape.circle, color: _riskColor.withValues(alpha:0.5 + _pulseCtrl.value * 0.5)),
                 ),
               ),
             ],
@@ -218,7 +218,7 @@ class _SafetyStatusScreenState extends State<SafetyStatusScreen>
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
               value: (_riskScore / 30).clamp(0.0, 1.0),
-              backgroundColor: _riskColor.withOpacity(0.12),
+              backgroundColor: _riskColor.withValues(alpha:0.12),
               valueColor: AlwaysStoppedAnimation(_riskColor),
               minHeight: 6,
             ),
@@ -239,13 +239,13 @@ class _SafetyStatusScreenState extends State<SafetyStatusScreen>
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 2))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha:0.04), blurRadius: 10, offset: const Offset(0, 2))],
       ),
       child: Row(
         children: [
           Container(
             width: 40, height: 40,
-            decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.10), borderRadius: BorderRadius.circular(10)),
+            decoration: BoxDecoration(color: AppColors.primary.withValues(alpha:0.10), borderRadius: BorderRadius.circular(10)),
             child: const Icon(Icons.location_on_rounded, color: AppColors.primary, size: 20),
           ),
           const SizedBox(width: 12),
@@ -269,7 +269,7 @@ class _SafetyStatusScreenState extends State<SafetyStatusScreen>
           if (!_loading && _lastPos != null)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(color: AppColors.success.withOpacity(0.10), borderRadius: BorderRadius.circular(50)),
+              decoration: BoxDecoration(color: AppColors.success.withValues(alpha:0.10), borderRadius: BorderRadius.circular(50)),
               child: const Text('LIVE', style: TextStyle(fontFamily: 'Poppins', fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.success)),
             ),
         ],
@@ -292,7 +292,7 @@ class _SafetyStatusScreenState extends State<SafetyStatusScreen>
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: _confirmed
-                  ? [AppColors.success, AppColors.success.withOpacity(0.8)]
+                  ? [AppColors.success, AppColors.success.withValues(alpha:0.8)]
                   : [AppColors.primary, AppColors.primaryLight],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
@@ -300,7 +300,7 @@ class _SafetyStatusScreenState extends State<SafetyStatusScreen>
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: (_confirmed ? AppColors.success : AppColors.primary).withOpacity(0.40),
+                color: (_confirmed ? AppColors.success : AppColors.primary).withValues(alpha:0.40),
                 blurRadius: 24,
                 offset: const Offset(0, 8),
               ),
@@ -343,7 +343,7 @@ class _SafetyStatusScreenState extends State<SafetyStatusScreen>
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 2))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha:0.04), blurRadius: 10, offset: const Offset(0, 2))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
