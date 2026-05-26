@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:tapguard/providers/profile_provider.dart';
 import 'package:tapguard/presentation/profile/widgets/contact_card.dart';
@@ -17,11 +16,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   final _contactNameController = TextEditingController();
   final _contactPhoneController = TextEditingController();
 
-  final _firestore = FirebaseFirestore.instance;
   final _auth = FirebaseAuth.instance;
 
-  bool _isEditingProfile = false;
   bool _newContactIsEmergency = false;
+  int _newContactPriority = 3; // 1=highest, 2=medium, 3=low (default low)
 
   @override
   void dispose() {
@@ -35,6 +33,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     _contactNameController.clear();
     _contactPhoneController.clear();
     _newContactIsEmergency = false;
+    _newContactPriority = 3;
 
     showModalBottomSheet(
       context: context,
@@ -132,12 +131,43 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ),
                 const SizedBox(height: 16),
 
+                // Priority selector
+                const Text(
+                  'Priority Level',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF333333),
+                    fontFamily: 'Poppins',
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Priority 1 is notified first in SOS emergencies',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade500,
+                    fontFamily: 'Poppins',
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    _priorityChip('1', 'High', const Color(0xFFFF3B30), 1, setModalState),
+                    const SizedBox(width: 8),
+                    _priorityChip('2', 'Medium', const Color(0xFFFF9500), 2, setModalState),
+                    const SizedBox(width: 8),
+                    _priorityChip('3', 'Low', Colors.grey, 3, setModalState),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
                 // Emergency contact toggle
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: _newContactIsEmergency
-                        ? const Color(0xFFFF3B30).withOpacity(0.1)
+                        ? const Color(0xFFFF3B30).withValues(alpha: 0.1)
                         : const Color(0xFFF5F5F5),
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -212,19 +242,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           contactName: _contactNameController.text,
                           contactPhone: _contactPhoneController.text,
                           isEmergency: _newContactIsEmergency,
+                          priority: _newContactPriority,
                         );
 
                         if (success && mounted) {
+                          if (!context.mounted) return;
                           Navigator.pop(context);
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Contact added successfully'),
-                              backgroundColor: Color(0xFF34C759),
+                            SnackBar(
+                              content: Text('${_contactNameController.text} added!'),
+                              backgroundColor: const Color(0xFF34C759),
                             ),
                           );
                         }
                       }
                     } catch (e) {
+                      if (!context.mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text('Error: $e'),
@@ -262,9 +295,54 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  void _showEditProfileDialog() {
-    final currentUser = _auth.currentUser;
+  Widget _priorityChip(String label, String desc, Color color, int value, StateSetter setModalState) {
+    final selected = _newContactPriority == value;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () {
+          setModalState(() => _newContactPriority = value);
+          setState(() {});
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: selected ? color.withValues(alpha: 0.15) : Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: selected ? color : Colors.grey.shade300,
+              width: selected ? 2 : 1,
+            ),
+          ),
+          child: Column(
+            children: [
+              Text(
+                'P$label',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: selected ? color : Colors.grey.shade500,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                desc,
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: selected ? color : Colors.grey.shade500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
+  void _showEditProfileDialog() {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -353,8 +431,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     );
 
                     if (success && mounted) {
+                      if (!context.mounted) return;
                       Navigator.pop(context);
-                      setState(() => _isEditingProfile = false);
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text('Profile updated successfully'),
@@ -363,6 +441,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       );
                     }
                   } catch (e) {
+                    if (!context.mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text('Error: $e'),
@@ -478,7 +557,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.04),
+                            color: Colors.black.withValues(alpha: 0.04),
                             blurRadius: 12,
                             offset: const Offset(0, 4),
                           ),
@@ -538,14 +617,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           // Edit profile button
                           GestureDetector(
                             onTap: () {
-                              setState(() => _isEditingProfile = true);
                               _showEditProfileDialog();
                             },
                             child: Container(
                               width: double.infinity,
                               padding: const EdgeInsets.symmetric(vertical: 12),
                               decoration: BoxDecoration(
-                                color: primaryColor.withOpacity(0.1),
+                                color: primaryColor.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: const Row(
@@ -580,10 +658,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         margin: const EdgeInsets.symmetric(horizontal: 16),
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFFF3B30).withOpacity(0.08),
+                          color: const Color(0xFFFF3B30).withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
-                            color: const Color(0xFFFF3B30).withOpacity(0.3),
+                            color: const Color(0xFFFF3B30).withValues(alpha: 0.3),
                             width: 1.5,
                           ),
                         ),
@@ -595,7 +673,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                               decoration: BoxDecoration(
                                 color: const Color(
                                   0xFFFF3B30,
-                                ).withOpacity(0.15),
+                                ).withValues(alpha: 0.15),
                                 shape: BoxShape.circle,
                               ),
                               child: const Center(
@@ -658,7 +736,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: primaryColor.withOpacity(0.12),
+                              color: primaryColor.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
@@ -724,7 +802,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                 width: 80,
                                 height: 80,
                                 decoration: BoxDecoration(
-                                  color: primaryColor.withOpacity(0.12),
+                                  color: primaryColor.withValues(alpha: 0.12),
                                   shape: BoxShape.circle,
                                 ),
                                 child: const Icon(
@@ -793,6 +871,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                         await profileService
                                             .removeTrustedContact(contact.uid);
                                         if (mounted) {
+                                          if (!context.mounted) return;
                                           Navigator.pop(context);
                                           ScaffoldMessenger.of(
                                             context,
@@ -828,6 +907,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                 isEmergency,
                               );
                               if (mounted) {
+                                if (!context.mounted) return;
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
                                     content: Text(
