@@ -4,12 +4,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/routes/app_routes.dart';
 import '../../data/models/session_model.dart';
 import '../../data/services/session_service.dart';
-import '../../data/services/notification_service.dart'; // ← NEW
+import '../../data/services/notification_service.dart';
 
 class ActiveSessionScreen extends StatefulWidget {
   const ActiveSessionScreen({super.key});
@@ -38,9 +37,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
 
   // Animations
   late AnimationController _ringAnim;
-  late AnimationController _sosPulse;
   late AnimationController _safeAnim;
-  late Animation<double> _sosScale;
   late Animation<double> _safeScale;
 
   @override
@@ -61,15 +58,6 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
       vsync: this,
       duration: const Duration(milliseconds: 2000),
     )..repeat(reverse: true);
-
-    _sosPulse = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-    )..repeat(reverse: true);
-    _sosScale = CurvedAnimation(
-      parent: _sosPulse,
-      curve: Curves.easeInOut,
-    ).drive(Tween(begin: 1.0, end: 1.1));
 
     _safeAnim = AnimationController(
       vsync: this,
@@ -173,10 +161,10 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
                       vertical: 12,
                     ),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.08),
+                      color: AppColors.primary.withValues(alpha:0.08),
                       borderRadius: BorderRadius.circular(50),
                       border: Border.all(
-                        color: AppColors.primary.withOpacity(0.3),
+                        color: AppColors.primary.withValues(alpha:0.3),
                       ),
                     ),
                     child: Text(
@@ -449,7 +437,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
 
   void _navigateHome() {
     if (!mounted) return;
-    Navigator.of(context).pushReplacementNamed(AppRoutes.home);
+    Navigator.of(context).pop();
   }
 
   @override
@@ -457,7 +445,6 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
     _countdownTimer?.cancel();
     _sessionSub?.cancel();
     _ringAnim.dispose();
-    _sosPulse.dispose();
     _safeAnim.dispose();
     super.dispose();
   }
@@ -482,7 +469,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.06),
+                  color: Colors.black.withValues(alpha:0.06),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -517,7 +504,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.06),
+                    color: Colors.black.withValues(alpha:0.06),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -534,12 +521,10 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
       ),
 
       body: SafeArea(
-        child: Stack(
-          children: [
-            SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 110),
-              child: Column(
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+          child: Column(
                 children: [
                   // Connected badge
                   Container(
@@ -549,8 +534,8 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
                     ),
                     decoration: BoxDecoration(
                       color: isConnected
-                          ? AppColors.success.withOpacity(0.10)
-                          : AppColors.primary.withOpacity(0.10),
+                          ? AppColors.success.withValues(alpha:0.10)
+                          : AppColors.primary.withValues(alpha:0.10),
                       borderRadius: BorderRadius.circular(50),
                     ),
                     child: Row(
@@ -560,7 +545,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
                           tween: Tween(begin: 0.5, end: 1.0),
                           duration: const Duration(milliseconds: 800),
                           curve: Curves.easeInOut,
-                          builder: (_, v, __) => Container(
+                          builder: (_, v, _) => Container(
                             width: 8,
                             height: 8,
                             decoration: BoxDecoration(
@@ -568,7 +553,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
                                   (isConnected
                                           ? AppColors.success
                                           : AppColors.primary)
-                                      .withOpacity(v),
+                                      .withValues(alpha:v),
                               shape: BoxShape.circle,
                             ),
                           ),
@@ -639,10 +624,10 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
                             vertical: 8,
                           ),
                           decoration: BoxDecoration(
-                            color: AppColors.primary.withOpacity(0.08),
+                            color: AppColors.primary.withValues(alpha:0.08),
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(
-                              color: AppColors.primary.withOpacity(0.3),
+                              color: AppColors.primary.withValues(alpha:0.3),
                             ),
                           ),
                           child: Row(
@@ -688,11 +673,11 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
                             colors: _isSafe
                                 ? [
                                     AppColors.success,
-                                    AppColors.success.withOpacity(0.8),
+                                    AppColors.success.withValues(alpha:0.8),
                                   ]
                                 : [
                                     AppColors.primary,
-                                    AppColors.primary.withOpacity(0.85),
+                                    AppColors.primary.withValues(alpha:0.85),
                                   ],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
@@ -704,7 +689,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
                                   (_isSafe
                                           ? AppColors.success
                                           : AppColors.primary)
-                                      .withOpacity(0.35),
+                                      .withValues(alpha:0.35),
                               blurRadius: 20,
                               offset: const Offset(0, 8),
                             ),
@@ -733,7 +718,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
                                   style: TextStyle(
                                     fontFamily: 'Poppins',
                                     fontSize: 12,
-                                    color: Colors.white.withOpacity(0.85),
+                                    color: Colors.white.withValues(alpha:0.85),
                                   ),
                                 ),
                               ],
@@ -742,7 +727,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
                               width: 50,
                               height: 50,
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.2),
+                                color: Colors.white.withValues(alpha:0.2),
                                 shape: BoxShape.circle,
                               ),
                               child: Icon(
@@ -776,7 +761,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
                         border: Border.all(color: Colors.grey.shade200),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.04),
+                            color: Colors.black.withValues(alpha:0.04),
                             blurRadius: 12,
                             offset: const Offset(0, 4),
                           ),
@@ -855,65 +840,12 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
                       ),
                     ],
                   ),
-                ],
-              ),
-            ),
-
-            // SOS FAB
-            Positioned(
-              bottom: 82,
-              right: 16,
-              child: AnimatedBuilder(
-                animation: _sosPulse,
-                builder: (_, child) =>
-                    Transform.scale(scale: _sosScale.value, child: child),
-                child: GestureDetector(
-                  onTap: () {
-                    HapticFeedback.heavyImpact();
-                    Navigator.of(context).pushNamed(AppRoutes.sos);
-                  },
-                  child: Container(
-                    width: 64,
-                    height: 64,
-                    decoration: BoxDecoration(
-                      color: AppColors.sos,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.sos.withOpacity(0.5),
-                          blurRadius: 20,
-                          spreadRadius: 4,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: const [
-                        Icon(Icons.wifi_rounded, color: Colors.white, size: 20),
-                        Text(
-                          'SOS',
-                          style: TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-            // Bottom nav
-            Positioned(bottom: 0, left: 0, right: 0, child: _buildBottomNav()),
-          ],
-        ),
-      ),
-    );
-  }
+                 ],
+               ),
+             ),
+           ),
+         );
+       }
 
   // ── Timer circle ──────────────────────────────────────────────────────────
   Widget _buildTimerCircle() {
@@ -932,12 +864,12 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
         children: [
           AnimatedBuilder(
             animation: _ringAnim,
-            builder: (_, __) => Container(
+            builder: (_, _) => Container(
               width: 250,
               height: 250,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: color.withOpacity(0.04 + _ringAnim.value * 0.05),
+                color: color.withValues(alpha:0.04 + _ringAnim.value * 0.05),
               ),
             ),
           ),
@@ -948,7 +880,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
             child: CircularProgressIndicator(
               value: _timerProgress,
               strokeWidth: 6,
-              backgroundColor: color.withOpacity(0.12),
+              backgroundColor: color.withValues(alpha:0.12),
               valueColor: AlwaysStoppedAnimation(color),
               strokeCap: StrokeCap.round,
             ),
@@ -962,7 +894,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
               color: Colors.white,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.06),
+                  color: Colors.black.withValues(alpha:0.06),
                   blurRadius: 20,
                   offset: const Offset(0, 4),
                 ),
@@ -1014,7 +946,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
                     vertical: 3,
                   ),
                   decoration: BoxDecoration(
-                    color: AppColors.sos.withOpacity(0.10),
+                    color: AppColors.sos.withValues(alpha:0.10),
                     borderRadius: BorderRadius.circular(50),
                   ),
                   child: const Text(
@@ -1077,62 +1009,6 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  // ── Bottom nav ────────────────────────────────────────────────────────────
-  Widget _buildBottomNav() {
-    final tabs = [
-      {'icon': Icons.home_rounded, 'label': 'Home'},
-      {'icon': Icons.map_rounded, 'label': 'Map'},
-      {'icon': Icons.timer_rounded, 'label': 'Sessions'},
-      {'icon': Icons.person_rounded, 'label': 'Profile'},
-    ];
-    return Container(
-      height: 68,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.07),
-            blurRadius: 20,
-            offset: const Offset(0, -4),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: List.generate(tabs.length, (i) {
-          final sel = i == 2;
-          return GestureDetector(
-            onTap: () {
-              HapticFeedback.lightImpact();
-              if (i == 0) _navigateHome();
-              if (i == 1) Navigator.of(context).pushNamed(AppRoutes.liveMap);
-            },
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  tabs[i]['icon'] as IconData,
-                  color: sel ? AppColors.primary : Colors.grey.shade400,
-                  size: 24,
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  tabs[i]['label'] as String,
-                  style: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 11,
-                    fontWeight: sel ? FontWeight.w600 : FontWeight.w400,
-                    color: sel ? AppColors.primary : Colors.grey.shade400,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }),
       ),
     );
   }
