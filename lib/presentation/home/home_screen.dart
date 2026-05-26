@@ -93,7 +93,6 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
-  int _selectedTab = 0;
 
   // ── System status ─────────────────────────────────────────────────────────
   _SystemStatus _status = const _SystemStatus();
@@ -345,11 +344,9 @@ class _HomeScreenState extends State<HomeScreen>
                     ),
 
                   SliverToBoxAdapter(child: _encBadge()),
-                  const SliverToBoxAdapter(child: SizedBox(height: 110)),
+                  const SliverToBoxAdapter(child: SizedBox(height: 20)),
                 ],
               ),
-              Positioned(bottom: 78, right: 16, child: _sosFab()),
-              Positioned(bottom: 0, left: 0, right: 0, child: _bottomNav()),
             ],
           ),
         ),
@@ -445,7 +442,7 @@ class _HomeScreenState extends State<HomeScreen>
       tween: Tween(begin: 0.6, end: 1.0),
       duration: const Duration(milliseconds: 800),
       curve: Curves.easeInOut,
-      builder: (_, v, __) => Container(
+      builder: (_, v, _) => Container(
         width: 8,
         height: 8,
         decoration: BoxDecoration(
@@ -893,110 +890,6 @@ class _HomeScreenState extends State<HomeScreen>
     ),
   );
 
-  // ── SOS FAB ───────────────────────────────────────────────────────────────
-  Widget _sosFab() => GestureDetector(
-    onTap: () {
-      HapticFeedback.heavyImpact();
-      Navigator.of(context).pushNamed(AppRoutes.sos);
-    },
-    child: Container(
-      width: 64,
-      height: 64,
-      decoration: BoxDecoration(
-        color: AppColors.sos,
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.sos.withValues(alpha: 0.45),
-            blurRadius: 16,
-            spreadRadius: 2,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: const [
-          Icon(Icons.wifi_rounded, color: Colors.white, size: 20),
-          Text(
-            'SOS',
-            style: TextStyle(
-              fontFamily: 'Poppins',
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              color: Colors.white,
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-
-  // ── Bottom nav ────────────────────────────────────────────────────────────
-  Widget _bottomNav() {
-    final tabs = [
-      {'icon': Icons.home_rounded, 'label': 'Home'},
-      {'icon': Icons.link_rounded, 'label': 'Sessions'},
-      {'icon': Icons.people_rounded, 'label': 'Contacts'},
-      {'icon': Icons.settings_rounded, 'label': 'Settings'},
-    ];
-    return Container(
-      height: 68,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.07),
-            blurRadius: 20,
-            offset: const Offset(0, -4),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: List.generate(tabs.length, (i) {
-          final sel = i == _selectedTab;
-          return GestureDetector(
-            onTap: () {
-              setState(() => _selectedTab = i);
-              HapticFeedback.lightImpact();
-              switch (i) {
-                case 1:
-                  Navigator.of(context).pushNamed(AppRoutes.activeSession);
-                  break;
-                case 2:
-                  Navigator.of(context).pushNamed(AppRoutes.profile);
-                  break;
-                case 3:
-                  Navigator.of(context).pushNamed(AppRoutes.settings);
-                  break;
-              }
-            },
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  tabs[i]['icon'] as IconData,
-                  color: sel ? AppColors.primary : Colors.grey.shade400,
-                  size: 24,
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  tabs[i]['label'] as String,
-                  style: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 11,
-                    fontWeight: sel ? FontWeight.w600 : FontWeight.w400,
-                    color: sel ? AppColors.primary : Colors.grey.shade400,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }),
-      ),
-    );
-  }
 }
 class _PairingOptionCard extends StatelessWidget {
   final IconData icon;
