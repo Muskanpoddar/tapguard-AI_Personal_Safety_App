@@ -288,7 +288,7 @@ class _SplashScreenState extends State<SplashScreen>
     return Center(
       child: AnimatedBuilder(
         animation: _ringController,
-        builder: (_, __) => Transform.scale(
+        builder: (_, _) => Transform.scale(
           scale: _ringScale.value,
           child: Container(
             width: 300,
@@ -296,7 +296,7 @@ class _SplashScreenState extends State<SplashScreen>
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               border: Border.all(
-                color: Colors.white.withOpacity(_ringOpacity.value),
+                color: Colors.white.withValues(alpha:_ringOpacity.value),
                 width: 1.5,
               ),
             ),
@@ -352,7 +352,7 @@ class _SplashScreenState extends State<SplashScreen>
                 fontFamily: 'Poppins',
                 fontSize: 16,
                 fontWeight: FontWeight.w400,
-                color: Colors.white.withOpacity(0.85),
+                color: Colors.white.withValues(alpha:0.85),
                 letterSpacing: 0.3,
               ),
             ),
@@ -376,10 +376,10 @@ class _SplashScreenState extends State<SplashScreen>
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.14),
+              color: Colors.white.withValues(alpha:0.14),
               borderRadius: BorderRadius.circular(50),
               border: Border.all(
-                color: Colors.white.withOpacity(0.22),
+                color: Colors.white.withValues(alpha:0.22),
                 width: 1,
               ),
             ),
@@ -388,7 +388,7 @@ class _SplashScreenState extends State<SplashScreen>
               children: [
                 Icon(
                   Icons.lock_outline_rounded,
-                  color: Colors.white.withOpacity(0.9),
+                  color: Colors.white.withValues(alpha:0.9),
                   size: 16,
                 ),
                 const SizedBox(width: 8),
@@ -398,7 +398,7 @@ class _SplashScreenState extends State<SplashScreen>
                     fontFamily: 'Poppins',
                     fontSize: 11.5,
                     fontWeight: FontWeight.w600,
-                    color: Colors.white.withOpacity(0.9),
+                    color: Colors.white.withValues(alpha:0.9),
                     letterSpacing: 1.2,
                   ),
                 ),
@@ -437,13 +437,13 @@ class _SplashScreenState extends State<SplashScreen>
       right: 0,
       child: AnimatedBuilder(
         animation: _loadBarController,
-        builder: (_, __) => FractionallySizedBox(
+        builder: (_, _) => FractionallySizedBox(
           widthFactor: _loadBarWidth.value,
           alignment: Alignment.centerLeft,
           child: Container(
             height: 3,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.55),
+              color: Colors.white.withValues(alpha:0.55),
               borderRadius: const BorderRadius.only(
                 topRight: Radius.circular(2),
                 bottomRight: Radius.circular(2),
@@ -459,7 +459,7 @@ class _SplashScreenState extends State<SplashScreen>
   Widget _buildSparkles() {
     return AnimatedBuilder(
       animation: _sparkleController,
-      builder: (_, __) => Stack(
+      builder: (_, _) => Stack(
         children: [
           _Sparkle(
             top: 130,
@@ -516,17 +516,17 @@ class _LogoCard extends StatelessWidget {
       width: 114,
       height: 114,
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.16),
+        color: Colors.white.withValues(alpha:0.16),
         borderRadius: BorderRadius.circular(32),
-        border: Border.all(color: Colors.white.withOpacity(0.25), width: 1),
+        border: Border.all(color: Colors.white.withValues(alpha:0.25), width: 1),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.20),
+            color: Colors.black.withValues(alpha:0.20),
             blurRadius: 32,
             offset: const Offset(0, 8),
           ),
           BoxShadow(
-            color: Colors.white.withOpacity(0.10),
+            color: Colors.white.withValues(alpha:0.10),
             blurRadius: 16,
             offset: const Offset(0, -4),
           ),
@@ -615,7 +615,7 @@ class _BackgroundRings extends StatelessWidget {
             height: 220,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: Colors.white.withOpacity(0.045),
+              color: Colors.white.withValues(alpha:0.045),
             ),
           ),
         ],
@@ -629,7 +629,7 @@ class _BackgroundRings extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.white.withOpacity(opacity), width: 1),
+        border: Border.all(color: Colors.white.withValues(alpha:opacity), width: 1),
       ),
     );
   }
@@ -658,7 +658,7 @@ class _Sparkle extends StatelessWidget {
         height: size,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: Colors.white.withOpacity(opacity!),
+          color: Colors.white.withValues(alpha:opacity!),
         ),
       ),
     );
@@ -676,7 +676,7 @@ class _PageDot extends StatelessWidget {
       width: active ? 28 : 18,
       height: 4,
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(active ? 0.85 : 0.35),
+        color: Colors.white.withValues(alpha:active ? 0.85 : 0.35),
         borderRadius: BorderRadius.circular(2),
       ),
     );
