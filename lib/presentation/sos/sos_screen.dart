@@ -22,7 +22,6 @@ import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:vibration/vibration.dart';
 import '../../core/constants/app_colors.dart';
-import '../../core/routes/app_routes.dart';
 import '../../data/services/risk_detection_service.dart';
 
 class SosScreen extends StatefulWidget {
@@ -42,9 +41,7 @@ class _SosScreenState extends State<SosScreen>
   bool _sosActive      = false;
   bool _sendingAlert  = false;
   bool _hasVibrator   = false;
-  bool _holdReleased  = false;   // true after user holds 2s without cancelling
-  int  _countdownSecs = 5;      // countdown before SOS auto-fires
-  Timer? _countdownTimer;
+  bool _holdReleased  = false;
   Timer? _flashTimer;
   StreamSubscription? _riskSub;
 
@@ -65,13 +62,14 @@ class _SosScreenState extends State<SosScreen>
 
     _initAnimations();
     _listenRiskStream();
-
-    // Auto-countdown to SOS fire (user must hold to cancel)
-    _startCountdown();
   }
 
   Future<void> _checkVibrator() async {
-    _hasVibrator = await Vibration.hasVibrator();
+    try {
+      _hasVibrator = await Vibration.hasVibrator();
+    } catch (_) {
+      _hasVibrator = false;
+    }
   }
 
   void _initAnimations() {
@@ -122,30 +120,33 @@ class _SosScreenState extends State<SosScreen>
   }
 
   void _pauseSos() {
-    _countdownTimer?.cancel();
     _flashTimer?.cancel();
-    if (_hasVibrator) Vibration.cancel();
+    _tryVibrateCancel();
   }
 
   void _resumeSos() {
     if (_sosActive) _startFlashEffect();
   }
 
-  // ── Countdown before auto-fire ─────────────────────────────────────────────
-  void _startCountdown() {
-    _countdownTimer?.cancel();
-    setState(() => _countdownSecs = 5);
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted) return;
-      setState(() {
-        if (_countdownSecs > 0) {
-          _countdownSecs--;
-        } else {
-          _countdownTimer?.cancel();
-          _triggerSos(fromRisk: false);
-        }
-      });
-    });
+  void _tryVibratePattern() {
+    if (!_hasVibrator) return;
+    try {
+      Vibration.vibrate(pattern: [0, 500, 200, 500, 200, 500], repeat: 0);
+    } catch (_) {}
+  }
+
+  void _tryVibrateCancel() {
+    if (!_hasVibrator) return;
+    try {
+      Vibration.cancel();
+    } catch (_) {}
+  }
+
+  void _tryVibrateDuration(int duration) {
+    if (!_hasVibrator) return;
+    try {
+      Vibration.vibrate(duration: duration);
+    } catch (_) {}
   }
 
   // ── TRIGGER SOS ─────────────────────────────────────────────────────────────
@@ -154,13 +155,10 @@ class _SosScreenState extends State<SosScreen>
     setState(() => _sendingAlert = true);
     HapticFeedback.heavyImpact();
 
-    _countdownTimer?.cancel();
+    _flashTimer?.cancel();
 
     // Fire vibration pattern
-    if (_hasVibrator) {
-      // Urgent: vibrate 500ms, pause 200ms, repeat
-      Vibration.vibrate(pattern: [0, 500, 200, 500, 200, 500], repeat: 0);
-    }
+    _tryVibratePattern();
 
     // Update Firestore SOS flag
     await _updateSosFirestore(active: true);
@@ -219,26 +217,9 @@ class _SosScreenState extends State<SosScreen>
     final contactsSnap = await _db
         .collection('users')
         .doc(uid)
-        .collection('trustedContacts')
-        .orderBy('priority', descending: false) // lower number = higher priority
+        .collection('contacts')
+        .orderBy('priority', descending: false)
         .get();
-
-    if (contactsSnap.docs.isEmpty) {
-      // Try old 'contacts' path for backward compat
-      final oldContacts = await _db
-          .collection('users')
-          .doc(uid)
-          .collection('contacts')
-          .get();
-      for (final doc in oldContacts.docs) {
-        final phone = doc.data()['phone'] as String? ?? doc.data()['phoneNumber'] as String? ?? '';
-        if (phone.isNotEmpty) {
-          await _sendSms(phone, 'SOS ALERT! $name needs help immediately.$locationLink');
-          await _writeNotification(doc.id, uid, name);
-        }
-      }
-      return;
-    }
 
     for (final doc in contactsSnap.docs) {
       final phone = doc.data()['phoneNumber'] as String? ?? '';
@@ -306,15 +287,12 @@ class _SosScreenState extends State<SosScreen>
   // ── CANCEL SOS (hold 2s) ───────────────────────────────────────────────────
   void _onHoldStart() {
     setState(() => _holdReleased = false);
-    // Vibrate on hold start
-    if (_hasVibrator) Vibration.vibrate(duration: 50);
+    _tryVibrateDuration(50);
   }
 
   void _onHoldEnd() {
     if (!_holdReleased) {
-      // User cancelled — stop everything
-      if (_hasVibrator) Vibration.cancel();
-      _countdownTimer?.cancel();
+      _tryVibrateCancel();
       _flashTimer?.cancel();
       _updateSosFirestore(active: false);
       _risk.cancelSos();
@@ -332,8 +310,7 @@ class _SosScreenState extends State<SosScreen>
   // ── "I am Safe" — cancel SOS ───────────────────────────────────────────────
   Future<void> _iAmSafe() async {
     HapticFeedback.heavyImpact();
-    if (_hasVibrator) Vibration.cancel();
-    _countdownTimer?.cancel();
+    _tryVibrateCancel();
     _flashTimer?.cancel();
 
     await _updateSosFirestore(active: false);
@@ -345,13 +322,12 @@ class _SosScreenState extends State<SosScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _countdownTimer?.cancel();
     _flashTimer?.cancel();
     _riskSub?.cancel();
     _pulseCtrl.dispose();
     _flashCtrl.dispose();
     _scaleCtrl.dispose();
-    if (_hasVibrator) Vibration.cancel();
+    _tryVibrateCancel();
     super.dispose();
   }
 
@@ -364,7 +340,7 @@ class _SosScreenState extends State<SosScreen>
         animation: _flashCtrl,
         builder: (_, child) => Container(
           color: _sosActive
-              ? AppColors.sos.withOpacity(0.08 * _flashOpacity.value)
+              ? AppColors.sos.withValues(alpha:0.08 * _flashOpacity.value)
               : Colors.transparent,
           child: child,
         ),
@@ -392,14 +368,14 @@ class _SosScreenState extends State<SosScreen>
               child: Center(
                 child: AnimatedBuilder(
                   animation: _pulseCtrl,
-                  builder: (_, __) => Transform.scale(
+                  builder: (_, _) => Transform.scale(
                     scale: _pulseScale.value,
                     child: Container(
                       width: 280,
                       height: 280,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: AppColors.sos.withOpacity(0.06),
+                        color: AppColors.sos.withValues(alpha:0.06),
                       ),
                     ),
                   ),
@@ -426,7 +402,7 @@ class _SosScreenState extends State<SosScreen>
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.06),
+                    color: Colors.black.withValues(alpha:0.06),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -445,7 +421,7 @@ class _SosScreenState extends State<SosScreen>
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                color: AppColors.sos.withOpacity(0.12),
+                color: AppColors.sos.withValues(alpha:0.12),
                 borderRadius: BorderRadius.circular(50),
               ),
               child: Row(
@@ -490,10 +466,6 @@ class _SosScreenState extends State<SosScreen>
 
             const SizedBox(height: 24),
 
-            // Countdown text
-            if (!_sosActive && !_sendingAlert)
-              _buildCountdownText(),
-
             if (_sendingAlert)
               _buildSendingStatus(),
 
@@ -511,17 +483,15 @@ class _SosScreenState extends State<SosScreen>
     final color = _sosActive ? AppColors.sos : AppColors.primary;
     final label = _sosActive
         ? 'SOS ACTIVATED'
-        : _countdownSecs > 0
-            ? 'TRIGGERING IN $_countdownSecs'
-            : 'READY TO SEND';
+        : 'READY TO SEND';
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 400),
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.10),
+        color: color.withValues(alpha:0.10),
         borderRadius: BorderRadius.circular(50),
-        border: Border.all(color: color.withOpacity(0.30)),
+        border: Border.all(color: color.withValues(alpha:0.30)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -560,7 +530,7 @@ class _SosScreenState extends State<SosScreen>
             color: AppColors.sos,
             boxShadow: [
               BoxShadow(
-                color: AppColors.sos.withOpacity(0.5),
+                color: AppColors.sos.withValues(alpha:0.5),
                 blurRadius: 40,
                 spreadRadius: 8,
                 offset: const Offset(0, 8),
@@ -590,30 +560,6 @@ class _SosScreenState extends State<SosScreen>
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildCountdownText() {
-    return Column(
-      children: [
-        Text(
-          'Tap the button to send alert immediately',
-          style: TextStyle(
-            fontFamily: 'Poppins',
-            fontSize: 14,
-            color: Colors.grey.shade500,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'Or wait ${_countdownSecs}s for auto-trigger',
-          style: TextStyle(
-            fontFamily: 'Poppins',
-            fontSize: 12,
-            color: Colors.grey.shade400,
-          ),
-        ),
-      ],
     );
   }
 
@@ -650,7 +596,7 @@ class _SosScreenState extends State<SosScreen>
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha:0.04),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -684,7 +630,7 @@ class _SosScreenState extends State<SosScreen>
           width: 34,
           height: 34,
           decoration: BoxDecoration(
-            color: AppColors.sos.withOpacity(0.08),
+            color: AppColors.sos.withValues(alpha:0.08),
             borderRadius: BorderRadius.circular(10),
           ),
           child: Icon(icon, color: AppColors.sos, size: 18),
@@ -723,7 +669,7 @@ class _SosScreenState extends State<SosScreen>
 
           // Back home
           GestureDetector(
-            onTap: () => Navigator.of(context).pushReplacementNamed(AppRoutes.home),
+            onTap: () => Navigator.of(context).pop(),
             child: Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 16),
@@ -763,9 +709,9 @@ class _SosScreenState extends State<SosScreen>
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 18),
         decoration: BoxDecoration(
-          color: AppColors.sos.withOpacity(0.08),
+          color: AppColors.sos.withValues(alpha:0.08),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.sos.withOpacity(0.3)),
+          border: Border.all(color: AppColors.sos.withValues(alpha:0.3)),
         ),
         child: Column(
           children: [
@@ -811,7 +757,7 @@ class _SosScreenState extends State<SosScreen>
           borderRadius: BorderRadius.circular(14),
           boxShadow: [
             BoxShadow(
-              color: AppColors.success.withOpacity(0.35),
+              color: AppColors.success.withValues(alpha:0.35),
               blurRadius: 16,
               offset: const Offset(0, 6),
             ),
@@ -872,12 +818,12 @@ class _PulsingDotState extends State<_PulsingDot>
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: _ctrl,
-      builder: (_, __) => Container(
+      builder: (_, _) => Container(
         width: 10,
         height: 10,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: widget.color.withOpacity(0.5 + _ctrl.value * 0.5),
+          color: widget.color.withValues(alpha:0.5 + _ctrl.value * 0.5),
         ),
       ),
     );
