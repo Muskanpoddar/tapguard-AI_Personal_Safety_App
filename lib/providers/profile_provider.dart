@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -28,7 +29,7 @@ final userContactsProvider = StreamProvider.family<List<ContactModel>, String>((
   return firestore
       .collection('users')
       .doc(userId)
-      .collection('trustedContacts')
+      .collection('contacts')
       .orderBy('priority', descending: true)
       .orderBy('addedAt', descending: true)
       .snapshots()
@@ -51,7 +52,7 @@ final contactDetailsProvider = FutureProvider.family<ContactModel?, String>((
     final doc = await firestore
         .collection('users')
         .doc(currentUser.uid)
-        .collection('trustedContacts')
+        .collection('contacts')
         .doc(contactUid)
         .get();
 
@@ -60,7 +61,7 @@ final contactDetailsProvider = FutureProvider.family<ContactModel?, String>((
     }
     return null;
   } catch (e) {
-    print('Error fetching contact: $e');
+    debugPrint('Error fetching contact: $e');
     return null;
   }
 });
@@ -99,7 +100,7 @@ class ProfileService {
       await _firestore
           .collection('users')
           .doc(currentUser.uid)
-          .collection('trustedContacts')
+          .collection('contacts')
           .doc(contactUid)
           .set(contact.toMap());
 
@@ -110,7 +111,7 @@ class ProfileService {
 
       return true;
     } catch (e) {
-      print('Error adding contact: $e');
+      debugPrint('Error adding contact: $e');
       return false;
     }
   }
@@ -124,7 +125,7 @@ class ProfileService {
       await _firestore
           .collection('users')
           .doc(currentUser.uid)
-          .collection('trustedContacts')
+          .collection('contacts')
           .doc(contactUid)
           .delete();
 
@@ -135,7 +136,7 @@ class ProfileService {
 
       return true;
     } catch (e) {
-      print('Error removing contact: $e');
+      debugPrint('Error removing contact: $e');
       return false;
     }
   }
@@ -149,13 +150,13 @@ class ProfileService {
       await _firestore
           .collection('users')
           .doc(currentUser.uid)
-          .collection('trustedContacts')
+          .collection('contacts')
           .doc(contactUid)
           .update({'priority': newPriority});
 
       return true;
     } catch (e) {
-      print('Error updating priority: $e');
+      debugPrint('Error updating priority: $e');
       return false;
     }
   }
@@ -169,7 +170,7 @@ class ProfileService {
       await _firestore
           .collection('users')
           .doc(currentUser.uid)
-          .collection('trustedContacts')
+          .collection('contacts')
           .doc(contactUid)
           .update({'isEmergencyContact': isEmergency});
 
@@ -181,7 +182,7 @@ class ProfileService {
 
       return true;
     } catch (e) {
-      print('Error setting emergency contact: $e');
+      debugPrint('Error setting emergency contact: $e');
       return false;
     }
   }
@@ -203,7 +204,7 @@ class ProfileService {
 
       return true;
     } catch (e) {
-      print('Error updating profile: $e');
+      debugPrint('Error updating profile: $e');
       return false;
     }
   }
