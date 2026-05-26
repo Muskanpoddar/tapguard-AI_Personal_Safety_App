@@ -410,7 +410,7 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.06),
+                  color: Colors.black.withValues(alpha:0.06),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -454,7 +454,7 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
                       if (isActive)
                         AnimatedBuilder(
                           animation: _ringCtrl,
-                          builder: (_, __) => Transform.scale(
+                          builder: (_, _) => Transform.scale(
                             scale: _ringScale.value,
                             child: Container(
                               width: 200,
@@ -462,7 +462,7 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 border: Border.all(
-                                  color: AppColors.primary.withOpacity(
+                                  color: AppColors.primary.withValues(alpha:
                                     _ringOpacity.value,
                                   ),
                                   width: 2,
@@ -479,7 +479,7 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
                         height: 200,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: circleColor.withOpacity(0.08),
+                          color: circleColor.withValues(alpha:0.08),
                         ),
                       ),
 
@@ -499,7 +499,7 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
                             color: circleColor,
                             boxShadow: [
                               BoxShadow(
-                                color: circleColor.withOpacity(0.4),
+                                color: circleColor.withValues(alpha:0.4),
                                 blurRadius: isActive ? 30 : 14,
                                 spreadRadius: isActive ? 8 : 2,
                               ),
@@ -559,9 +559,9 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
                   margin: const EdgeInsets.only(bottom: 12),
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppColors.sos.withOpacity(0.08),
+                    color: AppColors.sos.withValues(alpha:0.08),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.sos.withOpacity(0.3)),
+                    border: Border.all(color: AppColors.sos.withValues(alpha:0.3)),
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -667,7 +667,7 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
       borderRadius: BorderRadius.circular(16),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withOpacity(0.04),
+          color: Colors.black.withValues(alpha:0.04),
           blurRadius: 12,
           offset: const Offset(0, 4),
         ),
@@ -708,7 +708,7 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
         width: 34,
         height: 34,
         decoration: BoxDecoration(
-          color: color.withOpacity(0.10),
+          color: color.withValues(alpha:0.10),
           borderRadius: BorderRadius.circular(10),
         ),
         child: Icon(icon, color: color, size: 18),
@@ -738,7 +738,7 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.06),
+              color: AppColors.primary.withValues(alpha:0.06),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
@@ -780,7 +780,7 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
               onPressed: _cancel, // sync, instant
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.sos,
-                side: BorderSide(color: AppColors.sos.withOpacity(0.5)),
+                side: BorderSide(color: AppColors.sos.withValues(alpha:0.5)),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
                 ),
@@ -872,7 +872,7 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.primary,
                 side: BorderSide(
-                  color: AppColors.primary.withOpacity(0.4),
+                  color: AppColors.primary.withValues(alpha:0.4),
                   width: 1.5,
                 ),
                 shape: RoundedRectangleBorder(
