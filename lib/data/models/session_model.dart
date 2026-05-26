@@ -10,7 +10,8 @@ class SessionModel {
   final double ownerLng;
   final double ownerAccuracy;
 
-  // Receiver (Phone B - browser only)
+  // Receiver (Phone B - browser or app)
+  final String?   receiverUid;
   final String?   receiverName;
   final double?   receiverLat;
   final double?   receiverLng;
@@ -32,6 +33,7 @@ class SessionModel {
     required this.ownerLat,
     required this.ownerLng,
     required this.ownerAccuracy,
+    this.receiverUid,
     this.receiverName,
     this.receiverLat,
     this.receiverLng,
@@ -56,6 +58,7 @@ class SessionModel {
       ownerLat:         (d['ownerLat']      ?? 0.0).toDouble(),
       ownerLng:         (d['ownerLng']      ?? 0.0).toDouble(),
       ownerAccuracy:    (d['ownerAccuracy'] ?? 0.0).toDouble(),
+      receiverUid:      d['receiverUid'],
       receiverName:     d['receiverName'],
       receiverLat:      d['receiverLat']      != null
           ? (d['receiverLat']      as num).toDouble() : null,
@@ -79,6 +82,7 @@ class SessionModel {
     'ownerLat':       ownerLat,
     'ownerLng':       ownerLng,
     'ownerAccuracy':  ownerAccuracy,
+    'receiverUid':    receiverUid,
     'receiverJoined': receiverJoined,
     'isActive':       isActive,
     'shareUrl':       shareUrl,
@@ -86,6 +90,7 @@ class SessionModel {
 
   SessionModel copyWith({
     double?   ownerLat,      double?   ownerLng,   double?   ownerAccuracy,
+    String?   receiverUid,
     String?   receiverName,
     double?   receiverLat,   double?   receiverLng, double?  receiverAccuracy,
     bool?     receiverJoined, DateTime? receiverJoinedAt,
@@ -98,6 +103,7 @@ class SessionModel {
     ownerLat:         ownerLat         ?? this.ownerLat,
     ownerLng:         ownerLng         ?? this.ownerLng,
     ownerAccuracy:    ownerAccuracy    ?? this.ownerAccuracy,
+    receiverUid:      receiverUid      ?? this.receiverUid,
     receiverName:     receiverName     ?? this.receiverName,
     receiverLat:      receiverLat      ?? this.receiverLat,
     receiverLng:      receiverLng      ?? this.receiverLng,
