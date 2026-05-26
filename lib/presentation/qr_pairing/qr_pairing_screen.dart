@@ -32,7 +32,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../../core/constants/app_colors.dart';
@@ -254,8 +253,6 @@ class _QrPairingScreenState extends State<QrPairingScreen>
       final isActive = data['isActive'] == true;
       if (!isActive) throw Exception('This session has already ended.');
 
-      final ownerUid = data['ownerUid'] as String? ?? '';
-
       // Update session: receiver joined — write BOTH UID and name
       final myName = _auth.currentUser?.displayName ?? 'Contact';
       await _db.collection('sessions').doc(sessionId).update({
@@ -268,10 +265,8 @@ class _QrPairingScreenState extends State<QrPairingScreen>
       // Save contact (owner) to my contacts
       await _saveContactFromSession(data, sessionId, isOwner: false);
 
-      // Start GPS stream as receiver
-      // (SessionService.createSession owns Phone A's GPS stream;
-      //  Phone B just updates its own location in the session doc)
-      _startReceiverGpsStream(sessionId);
+      // Start GPS stream as receiver via SessionService (singleton, survives navigation)
+      _session.startReceiverStream(sessionId);
 
       if (!mounted) return;
       setState(() => _savingContact = false);
@@ -286,31 +281,6 @@ class _QrPairingScreenState extends State<QrPairingScreen>
       _qrService.markError(e.toString().replaceFirst('Exception: ', ''));
     }
   }
-
-  // Phone B streams its GPS into the session doc as receiverLat/receiverLng
-  void _startReceiverGpsStream(String sessionId) {
-    _gpsSub?.cancel();
-    _gpsSub = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 5,
-      ),
-    ).listen(
-      (pos) async {
-        await _db.collection('sessions').doc(sessionId).update({
-          'receiverLat': pos.latitude,
-          'receiverLng': pos.longitude,
-          'receiverAccuracy': pos.accuracy,
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-      },
-      onError: (e) {
-        debugPrint('Receiver GPS stream error: $e');
-      },
-    );
-  }
-
-  StreamSubscription<Position>? _gpsSub;
 
   // ── Save contact to Firestore (shared by both phones) ─────────────────────
   // isOwner = true  → Phone A saves Phone B (receiver) as contact
@@ -403,7 +373,6 @@ class _QrPairingScreenState extends State<QrPairingScreen>
     _statusSub?.cancel();
     _errorSub?.cancel();
     _receiverSub?.cancel();
-    _gpsSub?.cancel();
     _cameraCtrl?.dispose();
     _pulseCtrl.dispose();
     _scanLineCtrl.dispose();
@@ -440,7 +409,7 @@ class _QrPairingScreenState extends State<QrPairingScreen>
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.06),
+                  color: Colors.black.withValues(alpha:0.06),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -511,7 +480,7 @@ class _QrPairingScreenState extends State<QrPairingScreen>
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha:0.04),
               blurRadius: 12,
               offset: const Offset(0, 4),
             ),
@@ -552,7 +521,7 @@ class _QrPairingScreenState extends State<QrPairingScreen>
             width: 34,
             height: 34,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.10),
+              color: color.withValues(alpha:0.10),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(icon, color: color, size: 18),
@@ -634,10 +603,10 @@ class _QrPairingScreenState extends State<QrPairingScreen>
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: color.withOpacity(0.25), width: 1.5),
+            border: Border.all(color: color.withValues(alpha:0.25), width: 1.5),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.04),
+                color: Colors.black.withValues(alpha:0.04),
                 blurRadius: 10,
                 offset: const Offset(0, 2),
               ),
@@ -649,7 +618,7 @@ class _QrPairingScreenState extends State<QrPairingScreen>
                 width: 52,
                 height: 52,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.10),
+                  color: color.withValues(alpha:0.10),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Icon(icon, color: color, size: 26),
@@ -714,8 +683,8 @@ class _QrPairingScreenState extends State<QrPairingScreen>
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
             color: isSuccess
-                ? AppColors.success.withOpacity(0.10)
-                : const Color(0xFF2563EB).withOpacity(0.08),
+                ? AppColors.success.withValues(alpha:0.10)
+                : const Color(0xFF2563EB).withValues(alpha:0.08),
             borderRadius: BorderRadius.circular(50),
           ),
           child: Row(
@@ -772,7 +741,7 @@ class _QrPairingScreenState extends State<QrPairingScreen>
               borderRadius: BorderRadius.circular(24),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF2563EB).withOpacity(0.12),
+                  color: const Color(0xFF2563EB).withValues(alpha:0.12),
                   blurRadius: 24,
                   offset: const Offset(0, 8),
                 ),
@@ -827,7 +796,7 @@ class _QrPairingScreenState extends State<QrPairingScreen>
                               width: 200,
                               height: 200,
                               decoration: BoxDecoration(
-                                color: AppColors.success.withOpacity(0.92),
+                                color: AppColors.success.withValues(alpha:0.92),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: const Center(
@@ -906,7 +875,7 @@ class _QrPairingScreenState extends State<QrPairingScreen>
               onPressed: _cancel,
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.sos,
-                side: BorderSide(color: AppColors.sos.withOpacity(0.5)),
+                side: BorderSide(color: AppColors.sos.withValues(alpha:0.5)),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
                 ),
@@ -948,7 +917,7 @@ class _QrPairingScreenState extends State<QrPairingScreen>
                 height: 240,
                 child: AnimatedBuilder(
                   animation: _scanLineCtrl,
-                  builder: (_, __) => Stack(
+                  builder: (_, _) => Stack(
                     children: [
                       // Corner brackets
                       ..._buildCornerBrackets(),
@@ -963,7 +932,7 @@ class _QrPairingScreenState extends State<QrPairingScreen>
                             gradient: LinearGradient(
                               colors: [
                                 Colors.transparent,
-                                const Color(0xFF2563EB).withOpacity(0.8),
+                                const Color(0xFF2563EB).withValues(alpha:0.8),
                                 Colors.transparent,
                               ],
                             ),
@@ -987,7 +956,7 @@ class _QrPairingScreenState extends State<QrPairingScreen>
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.5),
+                  color: Colors.black.withValues(alpha:0.5),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
@@ -1023,7 +992,7 @@ class _QrPairingScreenState extends State<QrPairingScreen>
                   style: TextStyle(
                     fontFamily: 'Poppins',
                     fontSize: 12,
-                    color: Colors.white.withOpacity(0.7),
+                    color: Colors.white.withValues(alpha:0.7),
                   ),
                 ),
               ],
@@ -1077,7 +1046,7 @@ class _QrPairingScreenState extends State<QrPairingScreen>
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: (isSuccess ? AppColors.success : const Color(0xFF2563EB))
-                .withOpacity(0.10),
+                .withValues(alpha:0.10),
           ),
           child: Center(
             child: AnimatedContainer(
@@ -1144,9 +1113,9 @@ class _QrPairingScreenState extends State<QrPairingScreen>
         margin: const EdgeInsets.only(top: 12),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: AppColors.sos.withOpacity(0.08),
+          color: AppColors.sos.withValues(alpha:0.08),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.sos.withOpacity(0.3)),
+          border: Border.all(color: AppColors.sos.withValues(alpha:0.3)),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1213,7 +1182,7 @@ class _ScanOverlayPainter extends CustomPainter {
       height: windowSize,
     );
 
-    final paint = Paint()..color = Colors.black.withOpacity(0.65);
+    final paint = Paint()..color = Colors.black.withValues(alpha:0.65);
     final path = Path()
       ..addRect(Rect.fromLTWH(0, 0, size.width, size.height))
       ..addRRect(RRect.fromRectAndRadius(rect, const Radius.circular(16)))
