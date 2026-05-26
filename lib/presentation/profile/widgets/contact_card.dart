@@ -17,6 +17,12 @@ class ContactCard extends StatelessWidget {
     this.isEmergencyContact = false,
   });
 
+  Color _priorityColor(int priority) {
+    if (priority == 1) return const Color(0xFFFF3B30); // red - highest
+    if (priority == 2) return const Color(0xFFFF9500); // orange - medium
+    return Colors.grey; // low/default
+  }
+
   @override
   Widget build(BuildContext context) {
     const primaryColor = Color(0xFF7C4DFF);
@@ -29,13 +35,13 @@ class ContactCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isEmergencyContact
-              ? emergencyColor.withOpacity(0.3)
-              : primaryColor.withOpacity(0.1),
+              ? emergencyColor.withValues(alpha: 0.3)
+              : primaryColor.withValues(alpha: 0.1),
           width: isEmergencyContact ? 2 : 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -54,8 +60,8 @@ class ContactCard extends StatelessWidget {
                   height: 56,
                   decoration: BoxDecoration(
                     color: isEmergencyContact
-                        ? emergencyColor.withOpacity(0.15)
-                        : primaryColor.withOpacity(0.12),
+                        ? emergencyColor.withValues(alpha: 0.15)
+                        : primaryColor.withValues(alpha: 0.12),
                     shape: BoxShape.circle,
                   ),
                   child: Center(
@@ -90,14 +96,37 @@ class ContactCard extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          if (isEmergencyContact)
+                          // Priority badge
+                          if (contact.priority <= 3)
                             Container(
+                              margin: const EdgeInsets.only(left: 6),
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 8,
                                 vertical: 4,
                               ),
                               decoration: BoxDecoration(
-                                color: emergencyColor.withOpacity(0.15),
+                                color: _priorityColor(contact.priority).withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                'P${contact.priority}',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  color: _priorityColor(contact.priority),
+                                  fontFamily: 'Poppins',
+                                ),
+                              ),
+                            ),
+                          if (isEmergencyContact)
+                            Container(
+                              margin: const EdgeInsets.only(left: 6),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: emergencyColor.withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Row(
@@ -153,7 +182,7 @@ class ContactCard extends StatelessWidget {
                         vertical: 6,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF34C759).withOpacity(0.12),
+                        color: const Color(0xFF34C759).withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: const Row(
@@ -187,7 +216,7 @@ class ContactCard extends StatelessWidget {
                         vertical: 6,
                       ),
                       decoration: BoxDecoration(
-                        color: primaryColor.withOpacity(0.12),
+                        color: primaryColor.withValues(alpha:0.12),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: const Row(
@@ -227,7 +256,7 @@ class ContactCard extends StatelessWidget {
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 10),
                       decoration: BoxDecoration(
-                        color: primaryColor.withOpacity(0.1),
+                        color: primaryColor.withValues(alpha:0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Row(
@@ -263,8 +292,8 @@ class ContactCard extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(vertical: 10),
                       decoration: BoxDecoration(
                         color: isEmergencyContact
-                            ? emergencyColor.withOpacity(0.15)
-                            : Colors.grey.withOpacity(0.1),
+                            ? emergencyColor.withValues(alpha: 0.15)
+                            : Colors.grey.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Row(
@@ -305,7 +334,7 @@ class ContactCard extends StatelessWidget {
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 10),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFFF3B30).withOpacity(0.1),
+                        color: const Color(0xFFFF3B30).withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Row(
