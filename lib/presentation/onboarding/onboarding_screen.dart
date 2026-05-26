@@ -184,7 +184,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.06),
+                    color: Colors.black.withValues(alpha:0.06),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -239,7 +239,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           decoration: BoxDecoration(
             color: active
                 ? AppColors.primary
-                : AppColors.primary.withOpacity(0.25),
+                : AppColors.primary.withValues(alpha:0.25),
             borderRadius: BorderRadius.circular(2),
           ),
         );
@@ -267,7 +267,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                         : AppColors.primary,
                     foregroundColor: Colors.white,
                     elevation: 0,
-                    disabledBackgroundColor: AppColors.primary.withOpacity(0.7),
+                    disabledBackgroundColor: AppColors.primary.withValues(alpha:0.7),
                     disabledForegroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
@@ -424,7 +424,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
                     elevation: 0,
-                    disabledBackgroundColor: AppColors.primary.withOpacity(0.4),
+                    disabledBackgroundColor: AppColors.primary.withValues(alpha:0.4),
                     disabledForegroundColor: Colors.white70,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
@@ -674,7 +674,7 @@ class _Slide1NfcPairingState extends State<_Slide1NfcPairing>
                             (isConnected
                                     ? AppColors.success
                                     : AppColors.primary)
-                                .withOpacity(0.1),
+                                .withValues(alpha:0.1),
                       ),
                     ),
 
@@ -706,7 +706,7 @@ class _Slide1NfcPairingState extends State<_Slide1NfcPairing>
                         // NFC icon center
                         AnimatedBuilder(
                           animation: _nfcPulse,
-                          builder: (_, __) => Transform.scale(
+                          builder: (_, _) => Transform.scale(
                             scale: widget.isPairing ? _nfcScale.value : 1.0,
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 400),
@@ -723,7 +723,7 @@ class _Slide1NfcPairingState extends State<_Slide1NfcPairing>
                                         (isConnected
                                                 ? AppColors.success
                                                 : AppColors.primary)
-                                            .withOpacity(0.45),
+                                            .withValues(alpha:0.45),
                                     blurRadius: widget.isPairing ? 20 : 10,
                                     spreadRadius: widget.isPairing ? 5 : 2,
                                   ),
@@ -867,7 +867,7 @@ class _PhoneCard extends StatelessWidget {
       width: width,
       height: height,
       decoration: BoxDecoration(
-        color: isPrimary ? Colors.white : Colors.white.withOpacity(0.85),
+        color: isPrimary ? Colors.white : Colors.white.withValues(alpha:0.85),
         borderRadius: BorderRadius.circular(14),
         border: isPrimary
             ? Border.all(
@@ -878,7 +878,7 @@ class _PhoneCard extends StatelessWidget {
         boxShadow: [
           BoxShadow(
             color: (isConnected ? AppColors.success : AppColors.primary)
-                .withOpacity(0.12),
+                .withValues(alpha:0.12),
             blurRadius: 16,
             offset: const Offset(0, 4),
           ),
@@ -960,7 +960,7 @@ class _Slide2BiDirectionalState extends State<_Slide2BiDirectional>
                   height: 210,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: AppColors.primary.withOpacity(0.07),
+                    color: AppColors.primary.withValues(alpha:0.07),
                   ),
                 ),
                 Positioned(
@@ -983,17 +983,17 @@ class _Slide2BiDirectionalState extends State<_Slide2BiDirectional>
                         Container(
                           width: 80,
                           height: 2,
-                          color: AppColors.primary.withOpacity(0.25),
+                          color: AppColors.primary.withValues(alpha:0.25),
                         ),
                         AnimatedBuilder(
                           animation: _pulse,
-                          builder: (_, __) => Transform.scale(
+                          builder: (_, _) => Transform.scale(
                             scale: _scale.value,
                             child: Container(
                               width: 40,
                               height: 40,
                               decoration: BoxDecoration(
-                                color: AppColors.primary.withOpacity(0.12),
+                                color: AppColors.primary.withValues(alpha:0.12),
                                 shape: BoxShape.circle,
                                 border: Border.all(
                                   color: AppColors.primary,
@@ -1087,7 +1087,7 @@ class _Slide2BiDirectionalState extends State<_Slide2BiDirectional>
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withOpacity(0.12),
+            color: AppColors.primary.withValues(alpha:0.12),
             blurRadius: 16,
             offset: const Offset(0, 4),
           ),
@@ -1103,7 +1103,7 @@ class _Slide2BiDirectionalState extends State<_Slide2BiDirectional>
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: AppColors.primary.withOpacity(opacity),
+        color: AppColors.primary.withValues(alpha:opacity),
       ),
     );
   }
@@ -1166,14 +1166,14 @@ class _Slide3PrivacyFirstState extends State<_Slide3PrivacyFirst>
                   height: 200,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: AppColors.primary.withOpacity(0.07),
+                    color: AppColors.primary.withValues(alpha:0.07),
                   ),
                 ),
                 Positioned(top: 50, right: 65, child: _nfcDot()),
                 Positioned(bottom: 60, left: 60, child: _nfcDot()),
                 AnimatedBuilder(
                   animation: _shieldPulse,
-                  builder: (_, __) => Transform.scale(
+                  builder: (_, _) => Transform.scale(
                     scale: _scale.value,
                     child: Container(
                       width: 88,
@@ -1183,7 +1183,7 @@ class _Slide3PrivacyFirstState extends State<_Slide3PrivacyFirst>
                         borderRadius: BorderRadius.circular(24),
                         boxShadow: [
                           BoxShadow(
-                            color: AppColors.primary.withOpacity(0.35),
+                            color: AppColors.primary.withValues(alpha:0.35),
                             blurRadius: 24,
                             offset: const Offset(0, 8),
                           ),
@@ -1207,7 +1207,7 @@ class _Slide3PrivacyFirstState extends State<_Slide3PrivacyFirst>
                       borderRadius: BorderRadius.circular(50),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.08),
+                          color: Colors.black.withValues(alpha:0.08),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -1288,7 +1288,7 @@ class _Slide3PrivacyFirstState extends State<_Slide3PrivacyFirst>
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
                 color: widget.accepted
-                    ? AppColors.primary.withOpacity(0.08)
+                    ? AppColors.primary.withValues(alpha:0.08)
                     : Colors.white,
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
@@ -1375,7 +1375,7 @@ class _Slide3PrivacyFirstState extends State<_Slide3PrivacyFirst>
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha:0.04),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -1415,8 +1415,8 @@ class _Slide3PrivacyFirstState extends State<_Slide3PrivacyFirst>
       height: 28,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: AppColors.primary.withOpacity(0.15),
-        border: Border.all(color: AppColors.primary.withOpacity(0.3), width: 1),
+        color: AppColors.primary.withValues(alpha:0.15),
+        border: Border.all(color: AppColors.primary.withValues(alpha:0.3), width: 1),
       ),
       child: const Icon(Icons.wifi_rounded, color: AppColors.primary, size: 14),
     );
