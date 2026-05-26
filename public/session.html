@@ -1,6 +1,8 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <meta charset="UTF-8" />
     <meta
       name="viewport"
@@ -101,12 +103,6 @@
         background: #e8e8e8;
         position: relative;
       }
-      #map iframe {
-        width: 100%;
-        height: 100%;
-        border: none;
-      }
-
       /* ── Cards ──────────────────────────────────────────────────────── */
       .cards {
         width: 100%;
@@ -325,11 +321,7 @@
         <span id="status-text">SESSION ACTIVE</span>
       </div>
 
-      <!-- Map (Google Maps embed showing both pins) -->
-      <div id="map">
-        <iframe id="map-frame" src="" title="Live map"></iframe>
-      </div>
-
+      <div id="map"></div>
       <!-- Cards -->
       <div class="cards">
         <!-- Location cards -->
@@ -433,6 +425,11 @@
         updateDoc,
         serverTimestamp,
       } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+      import {
+        getAuth,
+        signInAnonymously,
+        onAuthStateChanged,
+      } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
       // ── YOUR Firebase config — replace with yours from Firebase Console ───────
       const firebaseConfig = {
@@ -447,6 +444,20 @@
 
       const app = initializeApp(firebaseConfig);
       const db = getFirestore(app);
+      const auth = getAuth(app);
+
+      signInAnonymously(auth).catch((err) => {
+        console.warn("Anonymous auth failed:", err.message);
+      });
+
+      let map = L.map("map").setView([13.26, 80.02], 15);
+
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "© OpenStreetMap contributors",
+      }).addTo(map);
+
+      let senderMarker = null;
+      let receiverMarker = null;
 
       // ── Extract session ID from URL ───────────────────────────────────────────
       // URL format: https://tapguard.page.link/s/{sessionId}
@@ -528,24 +539,36 @@
       function updateMap() {
         if (!senderLat || !senderLng) return;
 
-        let markers = `${senderLat},${senderLng}`;
-        let center = `${senderLat},${senderLng}`;
-
-        if (receiverLat && receiverLng) {
-          // Center between both phones
-          center = `${(senderLat + receiverLat) / 2},${(senderLng + receiverLng) / 2}`;
-          markers += `|${receiverLat},${receiverLng}`;
+        // Sender marker (Phone A)
+        if (!senderMarker) {
+          senderMarker = L.marker([senderLat, senderLng])
+            .addTo(map)
+            .bindPopup("Sender");
+        } else {
+          senderMarker.setLatLng([senderLat, senderLng]);
         }
 
-        // Replace YOUR_GOOGLE_MAPS_API_KEY with your key
-        const src =
-          `https://www.google.com/maps/embed/v1/place` +
-          `?key=YOUR_GOOGLE_MAPS_API_KEY` +
-          `&q=${senderLat},${senderLng}` +
-          `&zoom=15`;
+        // Receiver marker (Phone B)
+        if (receiverLat && receiverLng) {
+          if (!receiverMarker) {
+            receiverMarker = L.marker([receiverLat, receiverLng])
+              .addTo(map)
+              .bindPopup("You");
+          } else {
+            receiverMarker.setLatLng([receiverLat, receiverLng]);
+          }
+        }
 
-        const frame = document.getElementById("map-frame");
-        if (frame.src !== src) frame.src = src;
+        // Adjust view
+        if (receiverLat && receiverLng) {
+          const bounds = L.latLngBounds([
+            [senderLat, senderLng],
+            [receiverLat, receiverLng],
+          ]);
+          map.fitBounds(bounds, { padding: [50, 50] });
+        } else {
+          map.setView([senderLat, senderLng], 15);
+        }
       }
 
       // ── Start sharing Phone B location → Firestore ────────────────────────────
@@ -561,54 +584,79 @@
           "⏳ Getting location…";
         document.getElementById("share-btn").disabled = true;
 
-        navigator.geolocation.getCurrentPosition(
-          async (pos) => {
-            isSharingBack = true;
-            receiverLat = pos.coords.latitude;
-            receiverLng = pos.coords.longitude;
+        // Try to get location with multiple attempts
+        const tryGetLocation = (attempt) => {
+          navigator.geolocation.getCurrentPosition(
+            async (pos) => {
+              isSharingBack = true;
+              receiverLat = pos.coords.latitude;
+              receiverLng = pos.coords.longitude;
 
-            // Mark receiver joined + write first location
-            await updateDoc(sessionRef, {
-              receiverJoined: true,
-              receiverJoinedAt: serverTimestamp(),
-              receiverLat: pos.coords.latitude,
-              receiverLng: pos.coords.longitude,
-              receiverAccuracy: pos.coords.accuracy,
-            });
+              await updateDoc(sessionRef, {
+                receiverJoined: true,
+                receiverJoinedAt: serverTimestamp(),
+                receiverLat: pos.coords.latitude,
+                receiverLng: pos.coords.longitude,
+                receiverAccuracy: pos.coords.accuracy,
+              });
 
-            document.getElementById("share-btn").textContent =
-              "✅ Sharing Live";
-            document.getElementById("share-btn").disabled = false;
-            document.getElementById("share-btn").className = "btn btn-outline";
-            document.getElementById("share-note").textContent =
-              "Your location is being shared in real-time";
+              document.getElementById("share-btn").textContent =
+                "✅ Sharing Live";
+              document.getElementById("share-btn").disabled = false;
+              document.getElementById("share-btn").className =
+                "btn btn-outline";
+              document.getElementById("share-note").textContent =
+                "Your location is being shared in real-time";
 
-            // Watch and keep updating
-            watchId = navigator.geolocation.watchPosition(
-              async (p) => {
-                receiverLat = p.coords.latitude;
-                receiverLng = p.coords.longitude;
-                await updateDoc(sessionRef, {
-                  receiverLat: p.coords.latitude,
-                  receiverLng: p.coords.longitude,
-                  receiverAccuracy: p.coords.accuracy,
-                });
-                updateMap();
-              },
-              (err) => console.warn("GPS error:", err),
-              { enableHighAccuracy: true, maximumAge: 5000 },
-            );
-          },
-          (err) => {
-            document.getElementById("share-btn").textContent =
-              "📍 Share My Location";
-            document.getElementById("share-btn").disabled = false;
-            alert("Location access denied. Please allow location to share.");
-          },
-          { enableHighAccuracy: true, timeout: 10000 },
-        );
+              watchId = navigator.geolocation.watchPosition(
+                async (p) => {
+                  receiverLat = p.coords.latitude;
+                  receiverLng = p.coords.longitude;
+                  await updateDoc(sessionRef, {
+                    receiverLat: p.coords.latitude,
+                    receiverLng: p.coords.longitude,
+                    receiverAccuracy: p.coords.accuracy,
+                  });
+                  updateMap();
+                },
+                (err) => console.warn("GPS watch error:", err),
+                { enableHighAccuracy: true, maximumAge: 5000 },
+              );
+            },
+            (err) => {
+              console.error("GPS error code:", err.code, err.message);
+              if (attempt < 2) {
+                // Retry with lower accuracy
+                setTimeout(() => tryGetLocation(attempt + 1), 1000);
+              } else {
+                document.getElementById("share-btn").textContent =
+                  "📍 Share My Location";
+                document.getElementById("share-btn").disabled = false;
+                if (err.code === 1) {
+                  alert(
+                    "Location access denied.\n\nPlease:\n1. Tap the lock icon in browser\n2. Allow Location\n3. Refresh the page",
+                  );
+                } else if (err.code === 3) {
+                  alert(
+                    "Location timed out. Please ensure GPS is ON and try again.",
+                  );
+                } else {
+                  alert(
+                    "Could not get location. Please check GPS settings and try again.",
+                  );
+                }
+              }
+            },
+            {
+              enableHighAccuracy: attempt === 0, // first try high accuracy, then low
+              timeout: 15000,
+              maximumAge: 0,
+            },
+          );
+        };
+
+        tryGetLocation(0);
       };
-
       // ── Stop watching ─────────────────────────────────────────────────────────
       function stopSharingLocation() {
         if (watchId !== null) {
