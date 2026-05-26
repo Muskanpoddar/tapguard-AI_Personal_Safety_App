@@ -130,7 +130,7 @@ class AppTextStyles {
   static TextStyle get tagline => GoogleFonts.poppins(
         fontSize: 16,
         fontWeight: FontWeight.w400,
-        color: AppColors.white.withOpacity(0.85),
+        color: AppColors.white.withValues(alpha:0.85),
         letterSpacing: 0.3,
       );
 
@@ -138,7 +138,7 @@ class AppTextStyles {
   static TextStyle get pillLabel => GoogleFonts.poppins(
         fontSize: 11.5,
         fontWeight: FontWeight.w600,
-        color: AppColors.white.withOpacity(0.9),
+        color: AppColors.white.withValues(alpha:0.9),
         letterSpacing: 1.2,
       );
 
