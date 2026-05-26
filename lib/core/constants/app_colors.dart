@@ -54,11 +54,11 @@ class AppColors {
 
   // ── Transparency helpers ──────────────────────────────────────────────────
   static Color primaryWithOpacity(double opacity) =>
-      primary.withOpacity(opacity);
+      primary.withValues(alpha:opacity);
 
   static Color whiteWithOpacity(double opacity) =>
-      white.withOpacity(opacity);
+      white.withValues(alpha:opacity);
 
   static Color sosWithOpacity(double opacity) =>
-      sos.withOpacity(opacity);
+      sos.withValues(alpha:opacity);
 }
