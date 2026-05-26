@@ -190,7 +190,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
           decoration: BoxDecoration(
             color: done || active
                 ? AppColors.primary
-                : AppColors.primary.withOpacity(0.2),
+                : AppColors.primary.withValues(alpha:0.2),
             borderRadius: BorderRadius.circular(2),
           ),
         );
@@ -215,7 +215,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
               width: 90,
               height: 90,
               decoration: BoxDecoration(
-                color: color.withOpacity(0.15),
+                color: color.withValues(alpha:0.15),
                 shape: BoxShape.circle,
                 border: Border.all(color: color, width: 2.5),
               ),
@@ -274,7 +274,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
                   boxShadow: sel
                       ? [
                           BoxShadow(
-                            color: _colors[i].withOpacity(0.4),
+                            color: _colors[i].withValues(alpha:0.4),
                             blurRadius: 8,
                             spreadRadius: 1,
                           ),
@@ -326,7 +326,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha:0.05),
             blurRadius: 16,
             offset: const Offset(0, 4),
           ),
@@ -357,7 +357,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.06),
+              color: AppColors.primary.withValues(alpha:0.06),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
@@ -464,7 +464,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
           elevation: 0,
-          disabledBackgroundColor: AppColors.primary.withOpacity(0.35),
+          disabledBackgroundColor: AppColors.primary.withValues(alpha:0.35),
           disabledForegroundColor: Colors.white70,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
