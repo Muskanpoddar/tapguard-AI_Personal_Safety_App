@@ -16,7 +16,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+
 import '../../core/constants/app_colors.dart';
 
 class SessionHistoryScreen extends StatefulWidget {
@@ -88,7 +88,7 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 8, offset: const Offset(0, 2))],
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha:0.06), blurRadius: 8, offset: const Offset(0, 2))],
         ),
         child: const Icon(Icons.arrow_back_ios_new_rounded, size: 16, color: Color(0xFF1A1A2E)),
       ),
@@ -101,7 +101,7 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
     child: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(Icons.history_rounded, color: AppColors.primary.withOpacity(0.3), size: 72),
+        Icon(Icons.history_rounded, color: AppColors.primary.withValues(alpha:0.3), size: 72),
         const SizedBox(height: 16),
         const Text('No sessions yet', style: TextStyle(fontFamily: 'Poppins', fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF1A1A2E))),
         const SizedBox(height: 8),
@@ -138,14 +138,14 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 2))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha:0.04), blurRadius: 10, offset: const Offset(0, 2))],
       ),
       child: Row(
         children: [
           // Avatar
           CircleAvatar(
             radius: 24,
-            backgroundColor: statusColor.withOpacity(0.10),
+            backgroundColor: statusColor.withValues(alpha:0.10),
             child: Icon(
               s.isSos ? Icons.warning_rounded : Icons.people_rounded,
               color: statusColor,
@@ -190,7 +190,7 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.10),
+                  color: statusColor.withValues(alpha:0.10),
                   borderRadius: BorderRadius.circular(50),
                 ),
                 child: Text(
@@ -272,6 +272,6 @@ class _SessionEntry {
     final h = duration.inHours;
     final m = duration.inMinutes % 60;
     if (h > 0) return '${h}h ${m}m duration';
-    return '${m} min duration';
+    return '$m min duration';
   }
 }
