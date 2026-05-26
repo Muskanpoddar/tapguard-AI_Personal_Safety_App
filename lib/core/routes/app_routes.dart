@@ -9,8 +9,8 @@ import '../../presentation/onboarding/onboarding_screen.dart';
 import '../../presentation/auth/login_screen.dart';
 import '../../presentation/auth/otp_screen.dart';
 import '../../presentation/auth/profile_setup_screen.dart';
-// Home
-import '../../presentation/home/home_screen.dart';
+// Main
+import '../../presentation/main/main_screen.dart';
 // NFC Pairing
 import '../../presentation/nfc_pairing/nfc_pairing_screen.dart';
 // QR Pairing  ← NEW
@@ -74,7 +74,7 @@ class AppRoutes {
         return _slide(const ProfileSetupScreen(), routeSettings);
 
       case home:
-        return _slide(const HomeScreen(), routeSettings);
+        return _slide(const MainScreen(), routeSettings);
 
       case nfcPairing:
         return _slide(const NfcPairingScreen(), routeSettings);
