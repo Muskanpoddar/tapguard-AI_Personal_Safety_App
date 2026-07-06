@@ -173,9 +173,13 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
                   children: [
                     Icon(Icons.timer_rounded, size: 12, color: Colors.grey.shade400),
                     const SizedBox(width: 4),
-                    Text(
-                      s.formattedDuration,
-                      style: TextStyle(fontFamily: 'Poppins', fontSize: 11, color: Colors.grey.shade500),
+                    Expanded(
+                      child: Text(
+                        s.formattedDuration,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontFamily: 'Poppins', fontSize: 11, color: Colors.grey.shade500),
+                      ),
                     ),
                   ],
                 ),
