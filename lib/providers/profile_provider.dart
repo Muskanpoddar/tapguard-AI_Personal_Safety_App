@@ -75,10 +75,45 @@ class ProfileService {
   final _firestore = FirebaseFirestore.instance;
   final _auth = FirebaseAuth.instance;
 
+  // Create the user document on first login (post-OTP, pre-home).
+  Future<bool> createUserProfile({
+    required String name,
+    required String email,
+    String phoneNumber = '',
+    int avatarColor = 0,
+  }) async {
+    try {
+      final currentUser = _auth.currentUser;
+      if (currentUser == null) return false;
+
+      final now = DateTime.now();
+      final user = UserModel(
+        uid: currentUser.uid,
+        email: email.trim().toLowerCase(),
+        phoneNumber: phoneNumber.trim(),
+        name: name.trim(),
+        avatarColor: avatarColor,
+        createdAt: now,
+        updatedAt: now,
+      );
+
+      await _firestore
+          .collection('users')
+          .doc(currentUser.uid)
+          .set(user.toMap(), SetOptions(merge: false));
+
+      return true;
+    } catch (e) {
+      debugPrint('Error creating profile: $e');
+      return false;
+    }
+  }
+
   // Add a trusted contact
   Future<bool> addTrustedContact({
     required String contactUid,
     required String contactName,
+    required String contactEmail,
     required String contactPhone,
     required bool isEmergency,
     int priority = 3,
@@ -89,8 +124,9 @@ class ProfileService {
 
       final contact = ContactModel(
         uid: contactUid,
-        phoneNumber: contactPhone,
-        name: contactName,
+        email: contactEmail.trim().toLowerCase(),
+        phoneNumber: contactPhone.trim(),
+        name: contactName.trim(),
         isEmergencyContact: isEmergency,
         priority: priority,
         addedAt: DateTime.now(),
@@ -107,6 +143,7 @@ class ProfileService {
       // Update trusted contacts list in user document
       await _firestore.collection('users').doc(currentUser.uid).update({
         'trustedContactUids': FieldValue.arrayUnion([contactUid]),
+        'updatedAt': DateTime.now().toIso8601String(),
       });
 
       return true;
@@ -122,6 +159,19 @@ class ProfileService {
       final currentUser = _auth.currentUser;
       if (currentUser == null) return false;
 
+      // Clear emergencyContactUid if this was the primary
+      final userDoc = await _firestore
+          .collection('users')
+          .doc(currentUser.uid)
+          .get();
+      if (userDoc.exists &&
+          userDoc.data()?['emergencyContactUid'] == contactUid) {
+        await _firestore
+            .collection('users')
+            .doc(currentUser.uid)
+            .update({'emergencyContactUid': null});
+      }
+
       await _firestore
           .collection('users')
           .doc(currentUser.uid)
@@ -132,6 +182,7 @@ class ProfileService {
       // Update trusted contacts list in user document
       await _firestore.collection('users').doc(currentUser.uid).update({
         'trustedContactUids': FieldValue.arrayRemove([contactUid]),
+        'updatedAt': DateTime.now().toIso8601String(),
       });
 
       return true;
@@ -161,11 +212,49 @@ class ProfileService {
     }
   }
 
-  // Set emergency contact
+  // Rename a contact (display name only — does not change auth name).
+  Future<bool> updateContactName(String contactUid, String newName) async {
+    try {
+      final currentUser = _auth.currentUser;
+      if (currentUser == null) return false;
+
+      final trimmed = newName.trim();
+      if (trimmed.isEmpty) return false;
+
+      await _firestore
+          .collection('users')
+          .doc(currentUser.uid)
+          .collection('contacts')
+          .doc(contactUid)
+          .update({'name': trimmed});
+
+      return true;
+    } catch (e) {
+      debugPrint('Error renaming contact: $e');
+      return false;
+    }
+  }
+
+  // Set / unset emergency contact
   Future<bool> setEmergencyContact(String contactUid, bool isEmergency) async {
     try {
       final currentUser = _auth.currentUser;
       if (currentUser == null) return false;
+
+      // If we're setting a new emergency contact, clear isEmergencyContact
+      // on every other contact first so only one is "primary".
+      if (isEmergency) {
+        final allContacts = await _firestore
+            .collection('users')
+            .doc(currentUser.uid)
+            .collection('contacts')
+            .get();
+        for (final doc in allContacts.docs) {
+          if (doc.id != contactUid && (doc.data()['isEmergencyContact'] == true)) {
+            await doc.reference.update({'isEmergencyContact': false});
+          }
+        }
+      }
 
       await _firestore
           .collection('users')
@@ -174,11 +263,10 @@ class ProfileService {
           .doc(contactUid)
           .update({'isEmergencyContact': isEmergency});
 
-      if (isEmergency) {
-        await _firestore.collection('users').doc(currentUser.uid).update({
-          'emergencyContactUid': contactUid,
-        });
-      }
+      await _firestore.collection('users').doc(currentUser.uid).update({
+        'emergencyContactUid': isEmergency ? contactUid : null,
+        'updatedAt': DateTime.now().toIso8601String(),
+      });
 
       return true;
     } catch (e) {
@@ -187,20 +275,31 @@ class ProfileService {
     }
   }
 
-  // Update user profile
+  // Update editable profile fields (name, email, phone, avatar color).
   Future<bool> updateUserProfile({
-    required String name,
+    String? name,
+    String? email,
+    String? phoneNumber,
+    int? avatarColor,
     String? profileImageUrl,
   }) async {
     try {
       final currentUser = _auth.currentUser;
       if (currentUser == null) return false;
 
-      await _firestore.collection('users').doc(currentUser.uid).update({
-        'name': name,
-        'profileImageUrl': profileImageUrl,
+      final updates = <String, dynamic>{
         'updatedAt': DateTime.now().toIso8601String(),
-      });
+      };
+      if (name != null) updates['name'] = name.trim();
+      if (email != null) updates['email'] = email.trim().toLowerCase();
+      if (phoneNumber != null) updates['phoneNumber'] = phoneNumber.trim();
+      if (avatarColor != null) updates['avatarColor'] = avatarColor;
+      if (profileImageUrl != null) updates['profileImageUrl'] = profileImageUrl;
+
+      await _firestore
+          .collection('users')
+          .doc(currentUser.uid)
+          .update(updates);
 
       return true;
     } catch (e) {
