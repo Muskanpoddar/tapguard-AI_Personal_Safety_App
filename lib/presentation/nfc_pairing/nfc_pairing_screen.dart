@@ -175,7 +175,7 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
         final doc = await _db.collection('users').doc(uid).get();
         if (doc.exists) {
           name = doc.data()?['name'] ?? 'User';
-          phone = doc.data()?['phone'] ?? '';
+          phone = doc.data()?['phoneNumber'] ?? '';
         }
       }
 
@@ -245,7 +245,7 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
               .timeout(const Duration(seconds: 3));
           if (receiverDoc.exists) {
             receiverName = receiverDoc.data()?['name'] ?? receiverName;
-            receiverPhone = receiverDoc.data()?['phone'] ?? '';
+            receiverPhone = receiverDoc.data()?['phoneNumber'] ?? '';
           }
         }
       } catch (_) {
@@ -255,6 +255,7 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
       // Build ContactModel
       final contact = ContactModel(
         uid: receiverUid,
+        email: '',
         phoneNumber: receiverPhone,
         name: receiverName,
         profileImageUrl: null,
@@ -303,7 +304,7 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
 
   void _navigateToSession() {
     if (!mounted) return;
-    Navigator.of(context).pushReplacementNamed(AppRoutes.activeSession);
+    Navigator.of(context).pushReplacementNamed(AppRoutes.liveSession);
   }
 
   // ── CANCEL — stops NFC ONLY, keeps session + GPS + contact alive ──────────
@@ -629,6 +630,8 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
                         Flexible(
                           child: Text(
                             _session0!.shareUrl,
+                            maxLines: 1,
+                            softWrap: false,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontFamily: 'Poppins',
@@ -825,18 +828,23 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
                   size: 20,
                 ),
                 const SizedBox(width: 10),
-                Text(
-                  !_nfcAvailable
-                      ? 'Enable NFC in Settings'
-                      : _nfcStatus == NfcWriteStatus.error
-                      ? 'Try Again'
-                      : _session0 != null
-                      ? 'Retry NFC' // session exists, just retry
-                      : 'Start NFC Location Share',
-                  style: const TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
+                Flexible(
+                  child: Text(
+                    !_nfcAvailable
+                        ? 'Enable NFC in Settings'
+                        : _nfcStatus == NfcWriteStatus.error
+                        ? 'Try Again'
+                        : _session0 != null
+                        ? 'Retry NFC' // session exists, just retry
+                        : 'Start NFC Location Share',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    softWrap: false,
+                    style: const TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],
@@ -884,13 +892,17 @@ class _NfcPairingScreenState extends State<NfcPairingScreen>
                 children: [
                   Icon(Icons.share_rounded, size: 18, color: AppColors.primary),
                   const SizedBox(width: 8),
-                  Text(
-                    'Share Link Instead',
-                    style: TextStyle(
-                      fontFamily: 'Poppins',
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.primary,
+                  Flexible(
+                    child: Text(
+                      'Share Link Instead',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.primary,
+                      ),
                     ),
                   ),
                 ],

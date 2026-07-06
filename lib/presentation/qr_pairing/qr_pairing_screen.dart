@@ -149,7 +149,7 @@ class _QrPairingScreenState extends State<QrPairingScreen>
         final doc = await _db.collection('users').doc(uid).get();
         if (doc.exists) {
           name = doc.data()?['name'] ?? 'User';
-          phone = doc.data()?['phone'] ?? '';
+          phone = doc.data()?['phoneNumber'] ?? '';
         }
       }
 
@@ -189,7 +189,7 @@ class _QrPairingScreenState extends State<QrPairingScreen>
         await _saveContactFromSession(data, sessionId, isOwner: true);
         _qrService.markSuccess();
         await Future.delayed(const Duration(milliseconds: 1200));
-        _navigateToSession();
+        _navigateToLiveSession();
       }
     });
   }
@@ -273,7 +273,7 @@ class _QrPairingScreenState extends State<QrPairingScreen>
       _qrService.markSuccess();
 
       await Future.delayed(const Duration(milliseconds: 1200));
-      _navigateToSession();
+      _navigateToLiveSession();
     } catch (e) {
       if (!mounted) return;
       setState(() => _savingContact = false);
@@ -308,7 +308,7 @@ class _QrPairingScreenState extends State<QrPairingScreen>
         final doc = await _db.collection('users').doc(contactUid).get();
         if (doc.exists) {
           contactName = doc.data()?['name'] ?? contactName;
-          contactPhone = doc.data()?['phone'] ?? '';
+          contactPhone = doc.data()?['phoneNumber'] ?? '';
         }
       } catch (_) {}
     } else {
@@ -321,6 +321,7 @@ class _QrPairingScreenState extends State<QrPairingScreen>
 
     final contact = ContactModel(
       uid: contactUid,
+      email: '',
       phoneNumber: contactPhone,
       name: contactName,
       profileImageUrl: null,
@@ -363,9 +364,9 @@ class _QrPairingScreenState extends State<QrPairingScreen>
     // _session0 intentionally kept alive ✓
   }
 
-  void _navigateToSession() {
+  void _navigateToLiveSession() {
     if (!mounted) return;
-    Navigator.of(context).pushReplacementNamed(AppRoutes.activeSession);
+    Navigator.of(context).pushReplacementNamed(AppRoutes.liveSession);
   }
 
   @override
@@ -706,19 +707,24 @@ class _QrPairingScreenState extends State<QrPairingScreen>
                   color: isSuccess ? AppColors.success : const Color(0xFF2563EB),
                 ),
               const SizedBox(width: 8),
-              Text(
-                isGenerating
-                    ? 'Creating secure session…'
-                    : isSuccess
-                        ? 'Friend joined! Starting session…'
-                        : 'Waiting for your friend to scan…',
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: isSuccess
-                      ? AppColors.success
-                      : const Color(0xFF2563EB),
+              Flexible(
+                child: Text(
+                  isGenerating
+                      ? 'Creating secure session…'
+                      : isSuccess
+                          ? 'Friend joined! Starting session…'
+                          : 'Waiting for your friend to scan…',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: isSuccess
+                        ? AppColors.success
+                        : const Color(0xFF2563EB),
+                  ),
                 ),
               ),
             ],
@@ -849,6 +855,8 @@ class _QrPairingScreenState extends State<QrPairingScreen>
                   Flexible(
                     child: Text(
                       _session0!.shareUrl,
+                      maxLines: 1,
+                      softWrap: false,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontFamily: 'Poppins',

@@ -355,8 +355,12 @@ class _LiveMapScreenState extends State<LiveMapScreen>
                 ),
               ],
             ),
+            constraints: const BoxConstraints(maxWidth: 90),
             child: Text(
               isYou ? 'YOU' : label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              softWrap: false,
               style: TextStyle(
                 fontFamily: 'Poppins',
                 fontSize: 8,
@@ -567,9 +571,11 @@ class _LiveMapScreenState extends State<LiveMapScreen>
                   ),
                 ],
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                   // Status row
                   Row(
                     children: [
@@ -627,13 +633,17 @@ class _LiveMapScreenState extends State<LiveMapScreen>
                           color: AppColors.primary,
                         ),
                         const SizedBox(width: 6),
-                        Text(
-                          '$_etaMinutes min away',
-                          style: const TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.primary,
+                        Flexible(
+                          child: Text(
+                            '$_etaMinutes min away',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.primary,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -643,13 +653,17 @@ class _LiveMapScreenState extends State<LiveMapScreen>
                           color: Colors.grey.shade300,
                         ),
                         const SizedBox(width: 12),
-                        Text(
-                          '${_distanceKm.toStringAsFixed(1)} km',
-                          style: TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey.shade600,
+                        Flexible(
+                          child: Text(
+                            '${_distanceKm.toStringAsFixed(1)} km',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey.shade600,
+                            ),
                           ),
                         ),
                       ],
@@ -693,6 +707,7 @@ class _LiveMapScreenState extends State<LiveMapScreen>
                     ),
                   ),
                 ],
+                ),
               ),
             ),
           ),
@@ -714,6 +729,8 @@ class _LiveMapScreenState extends State<LiveMapScreen>
         const SizedBox(height: 6),
         Text(
           name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: const TextStyle(
             fontFamily: 'Poppins',
             fontSize: 12,
@@ -723,6 +740,8 @@ class _LiveMapScreenState extends State<LiveMapScreen>
         ),
         Text(
           sub,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: TextStyle(
             fontFamily: 'Poppins',
             fontSize: 11,
