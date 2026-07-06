@@ -1,8 +1,13 @@
+// lib/presentation/profile/profile_screen.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:tapguard/core/constants/app_colors.dart';
+import 'package:tapguard/core/constants/app_strings.dart';
+import 'package:tapguard/core/routes/app_routes.dart';
+import 'package:tapguard/data/models/user_model.dart';
+import 'package:tapguard/data/services/auth_session_service.dart';
 import 'package:tapguard/providers/profile_provider.dart';
-import 'package:tapguard/presentation/profile/widgets/contact_card.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -12,477 +17,401 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
-  final _nameController = TextEditingController();
-  final _contactNameController = TextEditingController();
-  final _contactPhoneController = TextEditingController();
+  static const List<Color> _avatarColors = [
+    AppColors.primary,
+    Color(0xFF06B6D4),
+    Color(0xFF10B981),
+    Color(0xFFF59E0B),
+    Color(0xFFEF4444),
+    Color(0xFFEC4899),
+  ];
 
-  final _auth = FirebaseAuth.instance;
-
-  bool _newContactIsEmergency = false;
-  int _newContactPriority = 3; // 1=highest, 2=medium, 3=low (default low)
+  // Edit-profile sheet state
+  final _editNameCtrl = TextEditingController();
+  final _editEmailCtrl = TextEditingController();
+  final _editPhoneCtrl = TextEditingController();
+  int _editColorIdx = 0;
+  bool _editingProfile = false;
+  bool _savingProfile = false;
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _contactNameController.dispose();
-    _contactPhoneController.dispose();
+    _editNameCtrl.dispose();
+    _editEmailCtrl.dispose();
+    _editPhoneCtrl.dispose();
     super.dispose();
   }
 
-  void _showAddContactDialog() {
-    _contactNameController.clear();
-    _contactPhoneController.clear();
-    _newContactIsEmergency = false;
-    _newContactPriority = 3;
+  // ── EDIT PROFILE BOTTOM SHEET ──────────────────────────────────────────────
+  void _openEditProfile({
+    required String name,
+    required String email,
+    required String phone,
+    required int colorIdx,
+  }) {
+    _editNameCtrl.text = name;
+    _editEmailCtrl.text = email;
+    _editPhoneCtrl.text = phone;
+    _editColorIdx = colorIdx.clamp(0, _avatarColors.length - 1);
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) => StatefulBuilder(
-        builder: (context, setModalState) => Padding(
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (sheetCtx, setSheet) => Padding(
           padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
-            left: 16,
-            right: 16,
-            top: 24,
+            bottom: MediaQuery.of(sheetCtx).viewInsets.bottom,
+            left: 20,
+            right: 20,
+            top: 16,
           ),
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text(
-                      'Add Trusted Contact',
+                      AppStrings.editProfile,
                       style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF333333),
                         fontFamily: 'Poppins',
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF1A1A2E),
                       ),
                     ),
                     GestureDetector(
-                      onTap: () => Navigator.pop(context),
+                      onTap: () => Navigator.of(sheetCtx).pop(),
                       child: const Icon(
                         Icons.close_rounded,
-                        size: 24,
+                        size: 22,
                         color: Color(0xFF999999),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
 
-                // Contact name
-                Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF5F5F5),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: TextField(
-                    controller: _contactNameController,
-                    decoration: const InputDecoration(
-                      hintText: 'Full Name',
-                      hintStyle: TextStyle(
-                        color: Color(0xFF999999),
-                        fontFamily: 'Poppins',
+                // Color picker preview
+                Center(
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 250),
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      color:
+                          _avatarColors[_editColorIdx].withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: _avatarColors[_editColorIdx],
+                        width: 2.5,
                       ),
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.all(16),
-                      prefixIcon: Icon(
-                        Icons.person_rounded,
-                        color: Color(0xFF7C4DFF),
-                        size: 20,
+                    ),
+                    child: Center(
+                      child: Text(
+                        _editNameCtrl.text.trim().isEmpty
+                            ? '?'
+                            : _editNameCtrl.text.trim()[0].toUpperCase(),
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 28,
+                          fontWeight: FontWeight.w700,
+                          color: _avatarColors[_editColorIdx],
+                        ),
                       ),
                     ),
                   ),
                 ),
                 const SizedBox(height: 12),
 
-                // Contact phone
-                Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF5F5F5),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: TextField(
-                    controller: _contactPhoneController,
-                    keyboardType: TextInputType.phone,
-                    decoration: const InputDecoration(
-                      hintText: 'Phone Number',
-                      hintStyle: TextStyle(
-                        color: Color(0xFF999999),
-                        fontFamily: 'Poppins',
-                      ),
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.all(16),
-                      prefixIcon: Icon(
-                        Icons.phone_rounded,
-                        color: Color(0xFF7C4DFF),
-                        size: 20,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // Priority selector
-                const Text(
-                  'Priority Level',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF333333),
-                    fontFamily: 'Poppins',
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Priority 1 is notified first in SOS emergencies',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade500,
-                    fontFamily: 'Poppins',
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    _priorityChip('1', 'High', const Color(0xFFFF3B30), 1, setModalState),
-                    const SizedBox(width: 8),
-                    _priorityChip('2', 'Medium', const Color(0xFFFF9500), 2, setModalState),
-                    const SizedBox(width: 8),
-                    _priorityChip('3', 'Low', Colors.grey, 3, setModalState),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                // Emergency contact toggle
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: _newContactIsEmergency
-                        ? const Color(0xFFFF3B30).withValues(alpha: 0.1)
-                        : const Color(0xFFF5F5F5),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.emergency_share_rounded,
-                        color: Color(0xFFFF3B30),
-                        size: 20,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Mark as Emergency Contact',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF333333),
-                                fontFamily: 'Poppins',
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Notify this contact first in emergencies',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: const Color(0xFF999999),
-                                fontFamily: 'Poppins',
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Switch(
-                        value: _newContactIsEmergency,
-                        onChanged: (value) {
-                          setModalState(() {
-                            _newContactIsEmergency = value;
-                          });
+                // Color chips
+                Center(
+                  child: Wrap(
+                    spacing: 10,
+                    children: List.generate(_avatarColors.length, (i) {
+                      final sel = i == _editColorIdx;
+                      return GestureDetector(
+                        onTap: () {
+                          HapticFeedback.lightImpact();
+                          setSheet(() => _editColorIdx = i);
                         },
-                        activeThumbColor: const Color(0xFFFF3B30),
-                      ),
-                    ],
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          width: sel ? 30 : 22,
+                          height: sel ? 30 : 22,
+                          decoration: BoxDecoration(
+                            color: _avatarColors[i],
+                            shape: BoxShape.circle,
+                            border: sel
+                                ? Border.all(color: Colors.white, width: 3)
+                                : null,
+                            boxShadow: sel
+                                ? [
+                                    BoxShadow(
+                                      color: _avatarColors[i]
+                                          .withValues(alpha: 0.4),
+                                      blurRadius: 8,
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                        ),
+                      );
+                    }),
                   ),
+                ),
+                const SizedBox(height: 20),
+
+                _label(AppStrings.yourName),
+                const SizedBox(height: 6),
+                _sheetField(
+                  controller: _editNameCtrl,
+                  hint: AppStrings.yourNameHint,
+                  icon: Icons.person_rounded,
+                  keyboardType: TextInputType.name,
+                  onChanged: (_) => setSheet(() {}),
+                ),
+                const SizedBox(height: 14),
+
+                _label(AppStrings.emailAddress),
+                const SizedBox(height: 6),
+                _sheetField(
+                  controller: _editEmailCtrl,
+                  hint: AppStrings.emailPlaceholder,
+                  icon: Icons.alternate_email_rounded,
+                  keyboardType: TextInputType.emailAddress,
+                ),
+                const SizedBox(height: 14),
+
+                _label(AppStrings.phoneNumber),
+                const SizedBox(height: 6),
+                _sheetField(
+                  controller: _editPhoneCtrl,
+                  hint: AppStrings.phonePlaceholder,
+                  icon: Icons.phone_rounded,
+                  keyboardType: TextInputType.phone,
                 ),
                 const SizedBox(height: 24),
 
-                // Add button
-                GestureDetector(
-                  onTap: () async {
-                    if (_contactNameController.text.isEmpty ||
-                        _contactPhoneController.text.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Please fill all fields'),
-                          backgroundColor: Color(0xFFFF3B30),
-                        ),
-                      );
-                      return;
-                    }
-
-                    try {
-                      final currentUser = _auth.currentUser;
-                      if (currentUser != null) {
-                        final profileService = ref.read(profileServiceProvider);
-                        final success = await profileService.addTrustedContact(
-                          contactUid: DateTime.now().millisecondsSinceEpoch
-                              .toString(),
-                          contactName: _contactNameController.text,
-                          contactPhone: _contactPhoneController.text,
-                          isEmergency: _newContactIsEmergency,
-                          priority: _newContactPriority,
-                        );
-
-                        if (success && mounted) {
-                          if (!context.mounted) return;
-                          Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('${_contactNameController.text} added!'),
-                              backgroundColor: const Color(0xFF34C759),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton(
+                    onPressed: _savingProfile ? null : _saveProfile,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: _savingProfile
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2.5,
                             ),
-                          );
-                        }
-                      }
-                    } catch (e) {
-                      if (!context.mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Error: $e'),
-                          backgroundColor: const Color(0xFFFF3B30),
-                        ),
-                      );
-                    }
-                  },
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF7C4DFF),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Center(
-                      child: Text(
-                        'Add Contact',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
-                          fontFamily: 'Poppins',
-                        ),
-                      ),
-                    ),
+                          )
+                        : const Text(
+                            AppStrings.saveChanges,
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
               ],
             ),
           ),
         ),
       ),
+    ).whenComplete(() {
+      _editingProfile = false;
+    });
+  }
+
+  Widget _label(String text) => Text(
+    text,
+    style: const TextStyle(
+      fontFamily: 'Poppins',
+      fontSize: 13,
+      fontWeight: FontWeight.w600,
+      color: Color(0xFF1A1A2E),
+    ),
+  );
+
+  Widget _sheetField({
+    required TextEditingController controller,
+    required String hint,
+    required IconData icon,
+    required TextInputType keyboardType,
+    void Function(String)? onChanged,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F5F5),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: TextField(
+        controller: controller,
+        keyboardType: keyboardType,
+        onChanged: onChanged,
+        style: const TextStyle(
+          fontFamily: 'Poppins',
+          fontSize: 14,
+          color: Color(0xFF1A1A2E),
+        ),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: const TextStyle(
+            fontFamily: 'Poppins',
+            fontSize: 13,
+            color: Color(0xFF999999),
+          ),
+          prefixIcon: Icon(icon, color: AppColors.primary, size: 20),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 14,
+          ),
+        ),
+      ),
     );
   }
 
-  Widget _priorityChip(String label, String desc, Color color, int value, StateSetter setModalState) {
-    final selected = _newContactPriority == value;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () {
-          setModalState(() => _newContactPriority = value);
-          setState(() {});
-        },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: selected ? color.withValues(alpha: 0.15) : Colors.grey.shade100,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: selected ? color : Colors.grey.shade300,
-              width: selected ? 2 : 1,
+  Future<void> _saveProfile() async {
+    final name = _editNameCtrl.text.trim();
+    final email = _editEmailCtrl.text.trim();
+    final phone = _editPhoneCtrl.text.trim();
+    final emailRegex = RegExp(
+      r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$',
+    );
+
+    if (name.isEmpty) {
+      _toast(AppStrings.pleaseEnterName, error: true);
+      return;
+    }
+    if (!emailRegex.hasMatch(email)) {
+      _toast(AppStrings.pleaseEnterEmail, error: true);
+      return;
+    }
+    if (phone.isEmpty) {
+      _toast(AppStrings.pleaseEnterPhone, error: true);
+      return;
+    }
+
+    setState(() => _savingProfile = true);
+
+    final service = ref.read(profileServiceProvider);
+    final ok = await service.updateUserProfile(
+      name: name,
+      email: email,
+      phoneNumber: phone,
+      avatarColor: _editColorIdx,
+    );
+
+    if (!mounted) return;
+    setState(() => _savingProfile = false);
+
+    if (!ok) {
+      _toast('Could not save. Please try again.', error: true);
+      return;
+    }
+
+    Navigator.of(context).pop();
+    _toast(AppStrings.profileUpdated, error: false);
+  }
+
+
+  void _confirmLogout() {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          AppStrings.logoutConfirmTitle,
+          style: TextStyle(
+            fontFamily: 'Poppins',
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        content: const Text(
+          AppStrings.logoutConfirmBody,
+          style: TextStyle(fontFamily: 'Poppins'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogCtx).pop(),
+            child: const Text(
+              AppStrings.cancel,
+              style: TextStyle(fontFamily: 'Poppins', color: Colors.grey),
             ),
           ),
-          child: Column(
-            children: [
-              Text(
-                'P$label',
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: selected ? color : Colors.grey.shade500,
-                ),
+          TextButton(
+            onPressed: () async {
+              Navigator.of(dialogCtx).pop();
+              await AuthSessionService.clearSession();
+              if (!mounted) return;
+              Navigator.of(
+                context,
+              ).pushNamedAndRemoveUntil(AppRoutes.login, (_) => false);
+            },
+            child: const Text(
+              AppStrings.logout,
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                color: Color(0xFFFF3B30),
+                fontWeight: FontWeight.w700,
               ),
-              const SizedBox(height: 2),
-              Text(
-                desc,
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  color: selected ? color : Colors.grey.shade500,
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
 
-  void _showEditProfileDialog() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-          left: 16,
-          right: 16,
-          top: 24,
+  void _toast(String message, {required bool error}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: const TextStyle(fontFamily: 'Poppins'),
         ),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Edit Profile',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF333333),
-                      fontFamily: 'Poppins',
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: const Icon(
-                      Icons.close_rounded,
-                      size: 24,
-                      color: Color(0xFF999999),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-
-              // Name field
-              Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF5F5F5),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: TextField(
-                  controller: _nameController,
-                  decoration: const InputDecoration(
-                    hintText: 'Full Name',
-                    hintStyle: TextStyle(
-                      color: Color(0xFF999999),
-                      fontFamily: 'Poppins',
-                    ),
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.all(16),
-                    prefixIcon: Icon(
-                      Icons.person_rounded,
-                      color: Color(0xFF7C4DFF),
-                      size: 20,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Save button
-              GestureDetector(
-                onTap: () async {
-                  if (_nameController.text.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Please enter a name'),
-                        backgroundColor: Color(0xFFFF3B30),
-                      ),
-                    );
-                    return;
-                  }
-
-                  try {
-                    final profileService = ref.read(profileServiceProvider);
-                    final success = await profileService.updateUserProfile(
-                      name: _nameController.text,
-                    );
-
-                    if (success && mounted) {
-                      if (!context.mounted) return;
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Profile updated successfully'),
-                          backgroundColor: Color(0xFF34C759),
-                        ),
-                      );
-                    }
-                  } catch (e) {
-                    if (!context.mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Error: $e'),
-                        backgroundColor: const Color(0xFFFF3B30),
-                      ),
-                    );
-                  }
-                },
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF7C4DFF),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Center(
-                    child: Text(
-                      'Save Changes',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                        fontFamily: 'Poppins',
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-            ],
-          ),
-        ),
+        backgroundColor: error ? const Color(0xFFFF3B30) : const Color(0xFF34C759),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 20),
       ),
     );
   }
 
+  // ══════════════════════════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
-    const primaryColor = Color(0xFF7C4DFF);
-    final currentUser = _auth.currentUser;
-    final currentUserAsync = ref.watch(currentUserProvider);
+    final userAsync = ref.watch(currentUserProvider);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F3F8),
@@ -490,460 +419,403 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         elevation: 0,
         backgroundColor: Colors.transparent,
         title: const Text(
-          'Profile & Contacts',
+          AppStrings.account,
           style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w700,
-            color: Color(0xFF333333),
             fontFamily: 'Poppins',
+            fontSize: 20,
+            fontWeight: FontWeight.w800,
+            color: Color(0xFF1A1A2E),
           ),
         ),
         centerTitle: true,
         leading: GestureDetector(
-          onTap: () => Navigator.pop(context),
+          onTap: () => Navigator.of(context).pop(),
           child: const Icon(
-            Icons.arrow_back_rounded,
-            size: 24,
-            color: Color(0xFF333333),
+            Icons.arrow_back_ios_new_rounded,
+            size: 18,
+            color: Color(0xFF1A1A2E),
           ),
         ),
       ),
-      body: currentUserAsync.when(
+      body: userAsync.when(
         loading: () => const Center(
-          child: CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+          child: CircularProgressIndicator(color: AppColors.primary),
+        ),
+        error: (e, _) => Center(
+          child: Text(
+            'Error: $e',
+            style: const TextStyle(fontFamily: 'Poppins'),
           ),
         ),
-        error: (err, stack) => Center(child: Text('Error: $err')),
         data: (user) {
           if (user == null) {
-            return const Center(child: Text('User data not found'));
+            return const Center(
+              child: Text(
+                'No profile found',
+                style: TextStyle(fontFamily: 'Poppins'),
+              ),
+            );
           }
 
-          _nameController.text = user.name;
-
-          // Watch user's contacts
-          final contactsAsync = ref.watch(
-            userContactsProvider(currentUser?.uid ?? ''),
+          return ListView(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.only(bottom: 32),
+            children: [
+              _buildProfileCard(user),
+              const SizedBox(height: 24),
+              _buildPersonalizationSection(),
+              const SizedBox(height: 24),
+              _buildSettingsSection(),
+            ],
           );
+        },
+      ),
+    );
+  }
 
-          return contactsAsync.when(
-            loading: () => const Center(
-              child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+  // ── PROFILE CARD ──────────────────────────────────────────────────────────
+  Widget _buildProfileCard(UserModel user) {
+    final color = _avatarColors[
+        user.avatarColor.clamp(0, _avatarColors.length - 1)];
+    final hasPhone = user.phoneNumber.isNotEmpty;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // Avatar
+          Container(
+            width: 88,
+            height: 88,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.15),
+              shape: BoxShape.circle,
+              border: Border.all(color: color, width: 2.5),
+            ),
+            child: Center(
+              child: Text(
+                user.name.isEmpty ? '?' : user.name[0].toUpperCase(),
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 36,
+                  fontWeight: FontWeight.w800,
+                  color: color,
+                ),
               ),
             ),
-            error: (err, stack) =>
-                Center(child: Text('Error loading contacts: $err')),
-            data: (contacts) {
-              final emergencyContact =
-                  user.emergencyContactUid != null && contacts.isNotEmpty
-                  ? contacts.firstWhere(
-                      (c) => c.uid == user.emergencyContactUid,
-                      orElse: () => contacts[0],
-                    )
-                  : null;
+          ),
+          const SizedBox(height: 14),
 
-              return SingleChildScrollView(
+          // Name
+          Text(
+            user.name.isEmpty ? 'No Name' : user.name,
+            style: const TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF1A1A2E),
+            ),
+          ),
+          const SizedBox(height: 4),
+
+          // Email
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.alternate_email_rounded,
+                size: 14,
+                color: Color(0xFF999999),
+              ),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  user.email.isEmpty ? 'No email' : user.email,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 13,
+                    color: Color(0xFF999999),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+
+          // Phone (warning if missing)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.phone_iphone_rounded,
+                size: 13,
+                color: hasPhone ? const Color(0xFF999999) : const Color(0xFFFF9500),
+              ),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  hasPhone ? user.phoneNumber : 'Add phone for SOS SMS',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 12,
+                    fontWeight: hasPhone ? FontWeight.w400 : FontWeight.w600,
+                    color: hasPhone
+                        ? const Color(0xFF999999)
+                        : const Color(0xFFFF9500),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Edit profile button
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _editingProfile
+                  ? null
+                  : () {
+                      setState(() => _editingProfile = true);
+                      _openEditProfile(
+                        name: user.name,
+                        email: user.email,
+                        phone: user.phoneNumber,
+                        colorIdx: user.avatarColor,
+                      );
+                    },
+              icon: const Icon(Icons.edit_rounded, size: 16),
+              label: const Text(
+                AppStrings.editProfile,
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: BorderSide(
+                  color: AppColors.primary.withValues(alpha: 0.5),
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── PERSONALIZATION SECTION (Phase 5) ─────────────────────────────────
+  Widget _buildPersonalizationSection() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.psychology_rounded,
+                  color: AppColors.primary,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Profile section
-                    Container(
-                      margin: const EdgeInsets.all(16),
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.04),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        children: [
-                          // Profile avatar
-                          Container(
-                            width: 80,
-                            height: 80,
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFF7C4DFF), Color(0xFF9B6FE8)],
-                              ),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Center(
-                              child: Text(
-                                user.name.isNotEmpty
-                                    ? user.name[0].toUpperCase()
-                                    : 'U',
-                                style: const TextStyle(
-                                  fontSize: 32,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
-                                  fontFamily: 'Poppins',
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-
-                          // User name
-                          Text(
-                            user.name.isEmpty ? 'No Name' : user.name,
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF333333),
-                              fontFamily: 'Poppins',
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-
-                          // Phone number
-                          Text(
-                            user.phoneNumber,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              color: Color(0xFF999999),
-                              fontFamily: 'Poppins',
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-
-                          // Edit profile button
-                          GestureDetector(
-                            onTap: () {
-                              _showEditProfileDialog();
-                            },
-                            child: Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              decoration: BoxDecoration(
-                                color: primaryColor.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.edit_rounded,
-                                    color: primaryColor,
-                                    size: 18,
-                                  ),
-                                  SizedBox(width: 8),
-                                  Text(
-                                    'Edit Profile',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                      color: primaryColor,
-                                      fontFamily: 'Poppins',
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
+                    Text(
+                      'AI Personalization',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1A1A2E),
                       ),
                     ),
-
-                    // Emergency contact highlight
-                    if (emergencyContact != null)
-                      Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 16),
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFF3B30).withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: const Color(0xFFFF3B30).withValues(alpha: 0.3),
-                            width: 1.5,
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 48,
-                              height: 48,
-                              decoration: BoxDecoration(
-                                color: const Color(
-                                  0xFFFF3B30,
-                                ).withValues(alpha: 0.15),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Center(
-                                child: Icon(
-                                  Icons.emergency_share_rounded,
-                                  color: Color(0xFFFF3B30),
-                                  size: 24,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Primary Emergency Contact',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
-                                      color: Color(0xFFFF3B30),
-                                      fontFamily: 'Poppins',
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    emergencyContact.name,
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                      color: Color(0xFF333333),
-                                      fontFamily: 'Poppins',
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                    // Trusted contacts section header
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Trusted Contacts',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF333333),
-                              fontFamily: 'Poppins',
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: primaryColor.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              '${contacts.length}',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: primaryColor,
-                                fontFamily: 'Poppins',
-                              ),
-                            ),
-                          ),
-                        ],
+                    Text(
+                      'On-device learning. Nothing is uploaded.',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 11,
+                        color: Color(0xFF6B7280),
                       ),
                     ),
-
-                    // Add contact button
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: GestureDetector(
-                        onTap: _showAddContactDialog,
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          decoration: BoxDecoration(
-                            color: primaryColor,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.add_rounded,
-                                color: Colors.white,
-                                size: 20,
-                              ),
-                              SizedBox(width: 8),
-                              Text(
-                                'Add Trusted Contact',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                  fontFamily: 'Poppins',
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // Contacts list or empty state
-                    if (contacts.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Center(
-                          child: Column(
-                            children: [
-                              Container(
-                                width: 80,
-                                height: 80,
-                                decoration: BoxDecoration(
-                                  color: primaryColor.withValues(alpha: 0.12),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.people_outline_rounded,
-                                  color: primaryColor,
-                                  size: 40,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              const Text(
-                                'No Trusted Contacts Yet',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: Color(0xFF333333),
-                                  fontFamily: 'Poppins',
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Add trusted contacts to enable location\nsharing and emergency notifications',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: const Color(0xFF999999),
-                                  fontFamily: 'Poppins',
-                                  height: 1.4,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                    else
-                      ListView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: contacts.length,
-                        itemBuilder: (context, index) {
-                          final contact = contacts[index];
-                          final isEmergency =
-                              contact.uid == user.emergencyContactUid;
-
-                          return ContactCard(
-                            contact: contact,
-                            isEmergencyContact: isEmergency,
-                            onRemove: () {
-                              // Confirm delete
-                              showDialog(
-                                context: context,
-                                builder: (context) => AlertDialog(
-                                  title: const Text('Remove Contact?'),
-                                  content: Text(
-                                    'Are you sure you want to remove ${contact.name}?',
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () => Navigator.pop(context),
-                                      child: const Text('Cancel'),
-                                    ),
-                                    TextButton(
-                                      onPressed: () async {
-                                        final profileService = ref.read(
-                                          profileServiceProvider,
-                                        );
-                                        await profileService
-                                            .removeTrustedContact(contact.uid);
-                                        if (mounted) {
-                                          if (!context.mounted) return;
-                                          Navigator.pop(context);
-                                          ScaffoldMessenger.of(
-                                            context,
-                                          ).showSnackBar(
-                                            const SnackBar(
-                                              content: Text(
-                                                'Contact removed successfully',
-                                              ),
-                                              backgroundColor: Color(
-                                                0xFF34C759,
-                                              ),
-                                            ),
-                                          );
-                                        }
-                                      },
-                                      child: const Text(
-                                        'Remove',
-                                        style: TextStyle(
-                                          color: Color(0xFFFF3B30),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
-                            onEmergencyToggle: (isEmergency) async {
-                              final profileService = ref.read(
-                                profileServiceProvider,
-                              );
-                              await profileService.setEmergencyContact(
-                                contact.uid,
-                                isEmergency,
-                              );
-                              if (mounted) {
-                                if (!context.mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      isEmergency
-                                          ? '${contact.name} is now your primary emergency contact'
-                                          : '${contact.name} is no longer your primary emergency contact',
-                                    ),
-                                    backgroundColor: isEmergency
-                                        ? const Color(0xFFFF3B30)
-                                        : const Color(0xFF34C759),
-                                  ),
-                                );
-                              }
-                            },
-                            onEdit: () {
-                              // Edit contact (can be extended)
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Edit functionality coming soon',
-                                  ),
-                                  backgroundColor: Color(0xFF7C4DFF),
-                                ),
-                              );
-                            },
-                          );
-                        },
-                      ),
-
-                    const SizedBox(height: 24),
                   ],
                 ),
-              );
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'TapGuard learns your usual places, times, and motion patterns '
+            'on your phone. The risk engine compares what you\'re doing right '
+            'now against your baseline and raises the score on unusual '
+            'behaviour.',
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 12,
+              color: Colors.grey.shade700,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () =>
+                Navigator.of(context).pushNamed(AppRoutes.riskInsights),
+            icon: const Icon(Icons.insights_rounded, size: 16),
+            label: const Text(
+              'View Risk Insights',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.primary,
+              side: BorderSide(
+                color: AppColors.primary.withValues(alpha: 0.50),
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              minimumSize: const Size.fromHeight(40),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── SETTINGS SECTION ──────────────────────────────────────────────────────
+  Widget _buildSettingsSection() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          _settingTile(
+            icon: Icons.notifications_rounded,
+            iconColor: const Color(0xFF007AFF),
+            title: 'Notifications',
+            onTap: () {
+              Navigator.of(context).pushNamed(AppRoutes.settings);
             },
-          );
-        },
+          ),
+          const Divider(height: 1, indent: 60),
+          _settingTile(
+            icon: Icons.privacy_tip_rounded,
+            iconColor: AppColors.primary,
+            title: 'Privacy & Permissions',
+            onTap: () {
+              Navigator.of(context).pushNamed(AppRoutes.privacy);
+            },
+          ),
+          const Divider(height: 1, indent: 60),
+          _settingTile(
+            icon: Icons.settings_rounded,
+            iconColor: Colors.grey.shade600,
+            title: 'Settings',
+            onTap: () {
+              Navigator.of(context).pushNamed(AppRoutes.settings);
+            },
+          ),
+          const Divider(height: 1, indent: 60),
+          _settingTile(
+            icon: Icons.logout_rounded,
+            iconColor: const Color(0xFFFF3B30),
+            title: AppStrings.logout,
+            titleColor: const Color(0xFFFF3B30),
+            onTap: _confirmLogout,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _settingTile({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    Color? titleColor,
+    required VoidCallback onTap,
+  }) {
+    return ListTile(
+      onTap: onTap,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      leading: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: iconColor.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(icon, color: iconColor, size: 18),
+      ),
+      title: Text(
+        title,
+        style: TextStyle(
+          fontFamily: 'Poppins',
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: titleColor ?? const Color(0xFF1A1A2E),
+        ),
+      ),
+      trailing: const Icon(
+        Icons.chevron_right_rounded,
+        color: Color(0xFFCCCCCC),
       ),
     );
   }
