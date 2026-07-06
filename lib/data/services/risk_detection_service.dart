@@ -1,196 +1,225 @@
 // lib/data/services/risk_detection_service.dart
 //
-// Context-Aware Risk Detection Engine
-// ==================================
-// A rule-based scoring model that continuously evaluates user safety risk.
+// Phase 1 rewrite — same public API as before (RiskLevel, RiskResult,
+// riskStream, recordInteraction, cancelSos, sendSafetyConfirmation),
+// but the internals now use the AI risk engine:
+//   motion_collector + audio_collector + location_collector +
+//   context_collector → feature_extractor → risk_model + user_baseline
+//   → decision_engine → RiskResult.
 //
-// RISK SCORING FORMULA:
-//   Risk Score = Time Score + Location Score + Movement Score + Inactivity Score
-//
-// THRESHOLDS:
-//   LOW  RISK  → score < 15  → No action needed
-//   MEDIUM RISK → score 15–24 → Show "Are you safe?" warning
-//   HIGH RISK  → score >= 25 → Auto-trigger SOS + live tracking + alert contacts
-//
-// INPUTS (collected every evaluation cycle):
-//   Time        → Hour of day (night hours = higher risk)
-//   Location    → GPS speed + movement type (stationary / walking / running / sudden)
-//   Movement    → Accelerometer-derived motion pattern
-//   Inactivity  → Seconds since last user interaction (tap / scroll / etc.)
-//
-// HOW IT WORKS:
-//   1. RiskDetectionService.startMonitoring() → starts periodic evaluation every 10s
-//   2. On each evaluation cycle → collects GPS + inactivity data → calculates score
-//   3. Score → RiskLevel → fires appropriate response
-//   4. Shake detection runs continuously → immediate HIGH RISK on violent shake
-//
-// USAGE:
-//   final risk = RiskDetectionService();
-//   risk.startMonitoring();
-//   risk.riskStream.listen((result) {
-//     if (result.shouldTriggerSos) { ... }
-//     if (result.shouldWarn)      { showWarningDialog(); }
-//   });
-//   risk.recordInteraction(); // call on every user touch/tap
-//   risk.stopMonitoring();
+// The rest of the app (Safety Status screen, SOS auto-trigger,
+// home tile) doesn't change because the API is identical.
 
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:geolocator/geolocator.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shake/shake.dart';
 
-/// Risk levels in increasing severity order.
-enum RiskLevel { low, medium, high }
+import 'risk/audio_collector.dart';
+import 'risk/baseline_store.dart';
+import 'risk/battery_profiler.dart';
+import 'risk/context_collector.dart';
+import 'risk/decision_engine.dart';
+import 'risk/feature_extractor.dart';
+import 'risk/location_collector.dart';
+import 'risk/model_health_monitor.dart';
+import 'risk/motion_collector.dart';
+import 'risk/risk_model.dart';
+import 'risk/risk_training_example.dart';
+import 'risk/training_data_store.dart';
+import 'risk/user_baseline.dart';
 
-/// Result returned after each risk evaluation cycle.
-class RiskResult {
-  final RiskLevel level;
-  final double score;
-  final Map<String, dynamic> factors;
-  final DateTime evaluatedAt;
-
-  const RiskResult({
-    required this.level,
-    required this.score,
-    required this.factors,
-    required this.evaluatedAt,
-  });
-
-  /// True if user should see a "Are you safe?" warning dialog.
-  bool get shouldWarn => level == RiskLevel.medium;
-
-  /// True if SOS should be automatically triggered.
-  bool get shouldTriggerSos => level == RiskLevel.high;
-
-  @override
-  String toString() =>
-      'RiskResult(level: $level, score: ${score.toStringAsFixed(1)}, factors: $factors)';
-}
+export 'risk/decision_engine.dart' show RiskLevel, RiskResult;
 
 class RiskDetectionService {
-  static final RiskDetectionService _i = RiskDetectionService._();
+  static final RiskDetectionService _i = RiskDetectionService._().._init();
   factory RiskDetectionService() => _i;
-  RiskDetectionService._() {
+  RiskDetectionService._();
+
+  bool _initialized = false;
+
+  // ── Collectors ─────────────────────────────────────────────────────────
+  final MotionCollector _motion = MotionCollector();
+  final AudioCollector _audio = AudioCollector();
+  final LocationCollector _location = LocationCollector();
+  final ContextCollector _context = ContextCollector();
+
+  // ── Engine pieces ──────────────────────────────────────────────────────
+  final FeatureExtractor _features = FeatureExtractor();
+  final RiskModel _model = RiskModel();
+  final BaselineStore _baselineStore = HiveBaselineStore();
+  late final UserBaseline _baseline = UserBaseline(store: _baselineStore);
+  late final DecisionEngine _engine = DecisionEngine(
+    model: _model,
+    baseline: _baseline,
+    healthMonitor: _healthMonitor,
+  );
+
+  // Phase 4 — collects user-feedback examples for retraining
+  final TrainingDataStore _trainingStore = TrainingDataStore();
+
+  // Phase 6 — battery profiling + model health monitoring
+  final BatteryProfiler _batteryProfiler = BatteryProfiler();
+  final ModelHealthMonitor _healthMonitor = ModelHealthMonitor();
+  ModelHealth get modelHealth => _healthMonitor.current;
+
+  // ── Shake (kept for parity with the previous engine) ──────────────────
+  late final ShakeDetector _shakeDetector;
+
+  // ── State ──────────────────────────────────────────────────────────────
+  final _resultCtrl = StreamController<RiskResult>.broadcast();
+  Stream<RiskResult> get riskStream => _resultCtrl.stream;
+  RiskResult? get lastResult => _lastResult;
+  bool get isMonitoring => _isMonitoring;
+  bool get sosTriggered => _sosTriggered;
+
+  bool _isMonitoring = false;
+  bool _sosTriggered = false;
+  Timer? _evalTimer;
+  RiskResult? _lastResult;
+  // Re-entrancy guard for _evaluate. The 1-Hz timer used to fire
+  // while a previous tick was still draining (e.g. a slow Hive
+  // save or a stalled TFLite inference), causing the platform
+  // method-channel queue to back up until OneSignal's 6 s ANR
+  // watchdog killed the app. Skip instead of piling up.
+  bool _evaluating = false;
+
+  // Latest samples from each collector (refreshed every 1 s)
+  MotionWindow? _latestMotion;
+  LocationSample? _latestLocation;
+  DateTime? _lastKeywordAt;
+  double _lastKeywordConfidence = 0.0;
+
+  // Phase 4 — feature vector from the last evaluation, used for
+  // capturing training examples when the user provides feedback.
+  RiskFeatures? _latestFeatures;
+
+  RiskDetectionService _init() {
+    if (_initialized) return this;
+    _initialized = true;
     _shakeDetector = ShakeDetector.autoStart(
       onPhoneShake: _onShakeDetected,
     );
+    _motion.windowStream.listen((w) => _latestMotion = w);
+    _location.sampleStream.listen((s) {
+      _latestLocation = s;
+      // Fire-and-forget: the baseline updates its persistent store
+      // every 50 samples.
+      unawaited(_baseline.observe(s));
+      // Once the baseline is loaded, push its frequent places
+      // back into the location collector for distance computation.
+      if (_baseline.frequentPlaces.isNotEmpty) {
+        _location.frequentPlaces = _baseline.frequentPlaces;
+      }
+    });
+    _audio.keywordStream.listen((hit) {
+      _lastKeywordAt = hit.at;
+      _lastKeywordConfidence = hit.confidence;
+    });
+    return this;
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // CONSTANTS — risk weights and thresholds
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  /// Time-of-day weights by hour (0–23).
-  /// Higher values = riskier time of day (e.g. late night / early morning).
-  static const Map<int, int> _timeWeights = {
-    0: 9, 1: 9, 2: 9, 3: 9,             // 12am–3am: very high
-    4: 8, 5: 7,                          // 4am–5am: high
-    6: 4, 7: 2,                          // 6am–7am: moderate
-    8: 1, 9: 1, 10: 1, 11: 1,           // 8am–11am: low
-    12: 1, 13: 1, 14: 1, 15: 1, 16: 1,   // noon–4pm: low
-    17: 1,                               // 5pm: low
-    18: 2, 19: 3,                        // 6pm–7pm: slight rise
-    20: 5, 21: 7,                        // 8pm–9pm: moderate
-    22: 8, 23: 9,                        // 10pm–11pm: high
-  };
-
-  /// Speed thresholds in metres/second.
-  static const double _speedStationary = 0.5;
-  static const double _speedWalking    = 1.5;
-  static const double _speedRunning     = 3.5;
-  static const double _speedSudden      = 6.0;
-
-  /// Score contributions for movement state.
-  static const double _moveStationary = 3.0;
-  static const double _moveWalking    = 1.0;
-  static const double _moveRunning    = 5.0;
-  static const double _moveSudden     = 9.0;
-
-  /// Inactivity thresholds in seconds.
-  static const int _warningInactivitySecs = 120;  // 2 minutes  → warning
-  static const int _highInactivitySecs    = 300;  // 5 minutes → high risk
-
-  /// Risk score thresholds.
-  static const double _mediumThreshold = 15.0;
-  static const double _highThreshold   = 25.0;
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // STATE
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  final _resultCtrl    = StreamController<RiskResult>.broadcast();
-  late final ShakeDetector _shakeDetector;
-
-  Stream<RiskResult> get riskStream      => _resultCtrl.stream;
-  RiskResult?        get lastResult     => _lastResult;
-  bool               get isMonitoring   => _isMonitoring;
-  bool               get sosTriggered   => _sosTriggered;
-
-  bool               _isMonitoring = false;
-  bool               _sosTriggered = false;
-  Timer?             _evalTimer;
-  Position?          _lastPosition;
-  DateTime?          _lastInteraction;
-  DateTime?          _sessionStart;
-  RiskResult?        _lastResult;
-
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════
   // PUBLIC API
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════
 
-  /// Start continuous risk monitoring.
-  /// Evaluation runs every 10 seconds. Shake detection runs continuously.
   Future<void> startMonitoring() async {
     if (_isMonitoring) return;
-    _isMonitoring  = true;
+    _isMonitoring = true;
     _sosTriggered = false;
-    _sessionStart = DateTime.now();
-    _lastInteraction = DateTime.now();
+    _engine.startSession();
+    _engine.recordInteraction();
 
-    _startShakeDetection();
+    // Load the user baseline (Hive). If Hive isn't initialised yet
+    // (rare — main.dart does it), fall back to an in-memory store.
+    try {
+      await HiveBaselineStore.ensureInitialized();
+      await _baselineStore.open();
+      await _baseline.load();
+      // Phase 4 — open the training-example store
+      await _trainingStore.open();
+    } catch (e) {
+      debugPrint('[RiskDetectionService] baseline load failed: $e');
+    }
 
-    // Run first evaluation after 3 seconds, then every 10 seconds
-    await Future.delayed(const Duration(seconds: 3));
-    if (_isMonitoring) await _evaluate();
+    // Try to load the (Phase-2) model. Phase 1 falls through to the
+    // heuristic inside RiskModel.
+    await _model.load();
+    await _audio.loadKeywordModel();
+    // Phase 4 — YAMNet audio event classifier. Optional: if missing,
+    // the audio score stays at 0 and the rest of the engine works.
+    await _audio.yamnet.load();
+    _shakeDetector.startListening();
 
+    // Phase 6 — start battery profiling.
+    _batteryProfiler.start();
+    _batteryProfiler.markSensorStarted('motion');
+    _batteryProfiler.markSensorStarted('location');
+    _batteryProfiler.markSensorStarted('audio');
+    _batteryProfiler.markSensorStarted('context');
+
+    // Start collectors. Some may fail (e.g. mic permission denied);
+    // the engine gracefully handles missing signals.
+    await Future.wait([
+      _context.start(),
+      _location.start(),
+      _audio.start(),
+    ]);
+    _motion.start();
+
+    // Cadence: 2 s. A risk engine doesn't need 1-Hz — at 2 s we still
+    // catch violent motion within two seconds, but the platform
+    // thread has half as many timer callbacks to service. Combined
+    // with the re-entrancy guard in _evaluate, this keeps us well
+    // under the 5 s ANR limit even on slow devices.
     _evalTimer = Timer.periodic(
-      const Duration(seconds: 10),
-      (_) async { if (_isMonitoring) await _evaluate(); },
+      const Duration(seconds: 2),
+      (_) => _evaluate(),
     );
   }
 
-  /// Stop monitoring.
   Future<void> stopMonitoring() async {
+    if (!_isMonitoring) return;
     _isMonitoring = false;
     _evalTimer?.cancel();
     _evalTimer = null;
     _shakeDetector.stopListening();
+    await Future.wait([
+      _motion.stop(),
+      _audio.stop(),
+      _location.stop(),
+      _context.stop(),
+    ]);
   }
 
-  /// Call this on every user interaction (tap, scroll, key press).
-  /// Resets the inactivity timer.
   void recordInteraction() {
-    _lastInteraction = DateTime.now();
+    _engine.recordInteraction();
   }
 
-  /// Manually trigger SOS immediately.
   Future<void> triggerSosManually() async {
     if (_sosTriggered) return;
     _sosTriggered = true;
     final result = RiskResult(
       level: RiskLevel.high,
-      score: 100.0,
-      factors: {'trigger': 'manual', 'timestamp': DateTime.now().toIso8601String()},
+      score: 1.0,
+      factors: {'trigger': 'manual'},
       evaluatedAt: DateTime.now(),
+      modelScore: 1.0,
+      anomalyScore: 0,
+      keywordScore: 0,
+      rulesScore: 1.0,
     );
     _lastResult = result;
     _resultCtrl.add(result);
+    unawaited(_captureTrainingExample(
+      label: 1.0,
+      source: TrainingSource.sosFired,
+    ));
     await _dispatchSos(result);
   }
 
-  /// Cancel an active SOS.
   Future<void> cancelSos() async {
     _sosTriggered = false;
     final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -203,14 +232,12 @@ class RiskDetectionService {
     } catch (_) {}
   }
 
-  /// "I am safe" — resets inactivity + cancels SOS + notifies contacts.
   Future<void> sendSafetyConfirmation() async {
-    recordInteraction();
+    _engine.recordInteraction();
 
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
-    // Cancel SOS in user doc
     try {
       await FirebaseFirestore.instance.collection('users').doc(uid).set({
         'lastSafeAt': FieldValue.serverTimestamp(),
@@ -219,9 +246,17 @@ class RiskDetectionService {
       }, SetOptions(merge: true));
     } catch (_) {}
 
+    // Phase 4 — capture a "definitely safe" example for retraining.
+    // Only do this when an SOS was actually in flight (otherwise the
+    // user is just opening the screen and the data is noise).
+    if (_sosTriggered) {
+      unawaited(_captureTrainingExample(
+        label: 0.0,
+        source: TrainingSource.iAmSafe,
+      ));
+    }
     _sosTriggered = false;
 
-    // Notify all trusted contacts — write to each contact's own notifications collection
     final contacts = await FirebaseFirestore.instance
         .collection('users')
         .doc(uid)
@@ -238,7 +273,8 @@ class RiskDetectionService {
             .add({
           'type': 'safety_confirmation',
           'fromUid': uid,
-          'message': '${FirebaseAuth.instance.currentUser?.displayName ?? 'User'} is safe',
+          'message':
+              '${FirebaseAuth.instance.currentUser?.displayName ?? 'User'} is safe',
           'createdAt': FieldValue.serverTimestamp(),
           'read': false,
         });
@@ -248,194 +284,194 @@ class RiskDetectionService {
 
   void dispose() {
     stopMonitoring();
+    _motion.dispose();
+    _audio.close();
+    _location.dispose();
+    _context.dispose();
+    _model.close();
+    unawaited(_baseline.close());
+    unawaited(_trainingStore.close());
     _resultCtrl.close();
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // INTERNAL METHODS
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  void _startShakeDetection() {
-    _shakeDetector.startListening();
-  }
+  // ═══════════════════════════════════════════════════════════════════════
+  // INTERNAL
+  // ═══════════════════════════════════════════════════════════════════════
 
   void _onShakeDetected([ShakeEvent? event]) {
     if (_sosTriggered) return;
     _sosTriggered = true;
-
     final result = RiskResult(
       level: RiskLevel.high,
-      score: 100.0,
-      factors: {
-        'trigger': 'shake_detected',
-        'timestamp': DateTime.now().toIso8601String(),
-      },
+      score: 1.0,
+      factors: {'trigger': 'shake_detected'},
       evaluatedAt: DateTime.now(),
+      modelScore: 0,
+      anomalyScore: 0,
+      keywordScore: 0,
+      rulesScore: 1.0,
     );
-
     _lastResult = result;
     _resultCtrl.add(result);
+    unawaited(_captureTrainingExample(
+      label: 1.0,
+      source: TrainingSource.shakeSos,
+    ));
     _dispatchSos(result);
   }
 
   Future<void> _evaluate() async {
     if (!_isMonitoring || _sosTriggered) return;
-
-    final factors = <String, dynamic>{};
-    double score = 0.0;
-
-    // ── 1. TIME ───────────────────────────────────────────────────────────────
-    final now = DateTime.now();
-    final hour = now.hour;
-    final timeWeight = _timeWeights[hour] ?? 1;
-    // Time score = just the weight directly (1–9 scale, not multiplied)
-    factors['hour']       = hour;
-    factors['timeWeight'] = timeWeight;
-    factors['timeScore']  = timeWeight.toDouble();
-    score += timeWeight.toDouble();
-
-    // ── 2. MOVEMENT / SPEED ───────────────────────────────────────────────────
-    double moveScore = 0.0;
-    double speed = 0.0;
-    String moveType = 'unknown';
-
+    if (_evaluating) {
+      // Previous tick still running (e.g. slow Firestore dispatch).
+      // Skip this one so we don't stack work onto a stuck main
+      // isolate.
+      return;
+    }
+    _evaluating = true;
     try {
-      final pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          distanceFilter: 0,
-        ),
+      final keywordConf = _keywordConfidence();
+      final features = _features.build(
+        motion: _latestMotion,
+        location: _latestLocation,
+        context: _context.last,
+        keywordHit: _lastKeywordConfidence,
+        audio: _audio.latestAudioScore,
       );
-      _lastPosition = pos;
-      speed = pos.speed;
+      _latestFeatures = features;
+      final result = await _engine.decide(
+        features: features,
+        motion: _latestMotion,
+        keywordConfidence: keywordConf,
+        location: _latestLocation,
+      );
 
-      if (speed < _speedStationary) {
-        moveType = 'stationary';
-        moveScore = _moveStationary;
-      } else if (speed < _speedWalking) {
-        moveType = 'slow';
-        moveScore = 2.0;
-      } else if (speed < _speedRunning) {
-        moveType = 'walking';
-        moveScore = _moveWalking;
-      } else if (speed < _speedSudden) {
-        moveType = 'running';
-        moveScore = _moveRunning;
-      } else {
-        moveType = 'sudden_motion';
-        moveScore = _moveSudden;
+      _lastResult = result;
+      _resultCtrl.add(result);
+
+      if (result.shouldTriggerSos && !_sosTriggered) {
+        _sosTriggered = true;
+        unawaited(_captureTrainingExample(
+          label: 1.0,
+          source: TrainingSource.sosFired,
+        ));
+        // Don't await _dispatchSos here — it's fully fire-and-
+        // forget now (fanned out across contacts in parallel) and
+        // we don't want any single notification write gating the
+        // next 2-second tick.
+        unawaited(_dispatchSos(result));
       }
-    } catch (_) {
-      moveType = 'unknown';
-      moveScore = 2.0; // assume moderate risk when location unavailable
-      speed = 0.0;
+    } finally {
+      _evaluating = false;
     }
-
-    factors['speed']      = speed;
-    factors['moveType']   = moveType;
-    factors['moveScore']  = moveScore;
-    score += moveScore;
-
-    // ── 3. INACTIVITY ──────────────────────────────────────────────────────────
-    double inactScore = 0.0;
-    if (_lastInteraction != null) {
-      final inactiveSecs = DateTime.now().difference(_lastInteraction!).inSeconds;
-      if (inactiveSecs >= _highInactivitySecs) {
-        inactScore = 8.0;
-      } else if (inactiveSecs >= _warningInactivitySecs) {
-        inactScore = 4.0;
-      }
-      factors['inactiveSecs'] = inactiveSecs;
-      factors['inactScore']   = inactScore;
-      score += inactScore;
-    }
-
-    // ── 4. SESSION DURATION (longer alone = slightly higher risk) ──────────────
-    double durScore = 0.0;
-    if (_sessionStart != null) {
-      final sessionMins = DateTime.now().difference(_sessionStart!).inMinutes;
-      if (sessionMins >= 120)      { durScore = 6.0; }
-      else if (sessionMins >= 60)  { durScore = 4.0; }
-      else if (sessionMins >= 30)  { durScore = 2.0; }
-      factors['sessionMins'] = sessionMins;
-      factors['durScore']   = durScore;
-      score += durScore;
-    }
-
-    // ── DETERMINE RISK LEVEL ─────────────────────────────────────────────────
-    RiskLevel level;
-    if (score >= _highThreshold) {
-      level = RiskLevel.high;
-    } else if (score >= _mediumThreshold) {
-      level = RiskLevel.medium;
-    } else {
-      level = RiskLevel.low;
-    }
-
-    final result = RiskResult(
-      level: level,
-      score: score,
-      factors: factors,
-      evaluatedAt: DateTime.now(),
-    );
-
-    _lastResult = result;
-
-    if (level == RiskLevel.high && !_sosTriggered) {
-      _sosTriggered = true;
-      _dispatchSos(result);
-    }
-
-    _resultCtrl.add(result);
   }
 
-  
-  /// Dispatch SOS alert to Firestore + all trusted contacts.
+  double _keywordConfidence() {
+    if (_lastKeywordAt == null) return 0.0;
+    final since = DateTime.now().difference(_lastKeywordAt!).inSeconds;
+    if (since > 10) return 0.0;
+    // Decay over 10s
+    return _lastKeywordConfidence * (1.0 - since / 10.0);
+  }
+
   Future<void> _dispatchSos(RiskResult result) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
-    // Update SOS flag in user doc
-    try {
-      await FirebaseFirestore.instance.collection('users').doc(uid).set({
-        'sosActive':      true,
+    // 1. Mark the user as in SOS — fire-and-forget so a slow Firestore
+    //    write doesn't gate the whole dispatch.
+    unawaited(
+      FirebaseFirestore.instance.collection('users').doc(uid).set({
+        'sosActive': true,
         'sosTriggeredAt': FieldValue.serverTimestamp(),
-        'sosLocation': (_lastPosition != null)
-            ? GeoPoint(_lastPosition!.latitude, _lastPosition!.longitude)
-            : null,
         'sosRiskFactors': result.factors,
-      }, SetOptions(merge: true));
-    } catch (_) {}
+        'sosModelScore': result.modelScore,
+        'sosAnomalyScore': result.anomalyScore,
+      }, SetOptions(merge: true)).catchError((Object e) {
+        debugPrint('[RiskDetectionService] SOS user-flag write failed: $e');
+      }),
+    );
 
-    // Get trusted contacts
-    final contacts = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .collection('contacts')
-        .get();
+    try {
+      // 2. Read the trusted-contact list — only blocking call left.
+      final contacts = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('contacts')
+          .get();
 
-    for (final doc in contacts.docs) {
-      try {
-        await FirebaseFirestore.instance
+      // 3. Fan out the per-contact notifications in parallel. The
+      //    previous implementation awaited each one sequentially,
+      //    so 10 contacts × ~600 ms slow round-trip could pile up
+      //    past the 5 s ANR watchdog and trigger OneSignal's kill.
+      //    Now each add() races independently and we don't block
+      //    the UI isolate waiting for any of them.
+      final ownerName =
+          FirebaseAuth.instance.currentUser?.displayName ?? 'User';
+      for (final doc in contacts.docs) {
+        FirebaseFirestore.instance
             .collection('users')
             .doc(doc.id)
             .collection('notifications')
             .add({
-          'type':       'sos_alert',
-          'fromUid':    uid,
-          'fromName':   FirebaseAuth.instance.currentUser?.displayName ?? 'User',
-          'message':    'SOS ALERT! Trusted contact needs help.',
-          'location':   _lastPosition != null
-              ? '${_lastPosition!.latitude},${_lastPosition!.longitude}'
-              : null,
-          'createdAt':   FieldValue.serverTimestamp(),
-          'read':        false,
+              'type': 'sos_alert',
+              'fromUid': uid,
+              'fromName': ownerName,
+              'message': 'SOS ALERT! Trusted contact needs help.',
+              'createdAt': FieldValue.serverTimestamp(),
+              'read': false,
+            })
+            .then((_) {}, onError: (Object e) {
+          debugPrint(
+            '[RiskDetectionService] SOS notification to '
+            '${doc.id} failed: $e',
+          );
         });
-      } catch (_) {}
+      }
+    } catch (e) {
+      debugPrint('[RiskDetectionService] contact list query failed: $e');
+    }
+  }
+  // ── Phase 4 — training-example capture ───────────────────────────
+  /// Persist the latest feature vector with a label and source.
+  /// Called from `sendSafetyConfirmation` (label 0.0) and from
+  /// `_dispatchSos` (label 1.0, source `sos_fired` / `shake_sos`).
+  Future<void> _captureTrainingExample({
+    required double label,
+    required String source,
+  }) async {
+    final features = _latestFeatures;
+    if (features == null) return;
+    try {
+      await _trainingStore.add(RiskTrainingExample(
+        features: features.toList(),
+        label: label,
+        source: source,
+        capturedAt: DateTime.now(),
+      ));
+      if (kDebugMode) {
+        debugPrint(
+          '[RiskDetectionService] captured training example: '
+          'label=$label source=$source (total=${_trainingStore.count})',
+        );
+      }
+    } catch (e) {
+      debugPrint('[RiskDetectionService] training capture failed: $e');
     }
   }
 
-  /// Save preferences to SharedPreferences.
+  /// Public access to the training-data store — used by the
+  /// Safety Status screen to show "X examples collected, ready
+  /// to retrain".
+  TrainingDataStore get trainingDataStore => _trainingStore;
+
+  /// Public handle to the live [UserBaseline] used by the decision
+  /// engine. Screens subscribe to its `changes` stream to render
+  /// "X / N samples collected" progress, and read
+  /// `baseline.totalSamples` / `baseline.isReady` for state.
+  UserBaseline get baseline => _baseline;
+
+  // ── Preferences (kept for parity) ─────────────────────────────────────
   Future<void> savePreferences({
     required bool shakeDetectionEnabled,
     required int autoTimeoutMinutes,
@@ -447,7 +483,6 @@ class RiskDetectionService {
     await prefs.setInt('risk.location_accuracy', locationAccuracyLevel);
   }
 
-  /// Load preferences from SharedPreferences.
   Future<Map<String, dynamic>> loadPreferences() async {
     final prefs = await SharedPreferences.getInstance();
     return {
