@@ -197,16 +197,21 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               ),
             ),
           ),
-          Text(
-            _currentPage == 0 ? 'ONBOARDING' : 'TapGuard',
-            style: TextStyle(
-              fontFamily: 'Poppins',
-              fontSize: 13,
-              fontWeight: _currentPage == 0 ? FontWeight.w600 : FontWeight.w700,
-              color: _currentPage == 0
-                  ? AppColors.primary
-                  : const Color(0xFF1A1A2E),
-              letterSpacing: _currentPage == 0 ? 1.2 : 0,
+          Expanded(
+            child: Text(
+              _currentPage == 0 ? 'ONBOARDING' : 'TapGuard',
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 13,
+                fontWeight: _currentPage == 0 ? FontWeight.w600 : FontWeight.w700,
+                color: _currentPage == 0
+                    ? AppColors.primary
+                    : const Color(0xFF1A1A2E),
+                letterSpacing: _currentPage == 0 ? 1.2 : 0,
+              ),
             ),
           ),
           GestureDetector(
@@ -467,16 +472,18 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   void _showHowItWorksSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (_) => Padding(
         padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
             Center(
               child: Container(
                 width: 40,
@@ -534,6 +541,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           ],
         ),
       ),
+    ),
     );
   }
 
@@ -646,10 +654,12 @@ class _Slide1NfcPairingState extends State<_Slide1NfcPairing>
 
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
-            children: [
-              // Illustration box — clips overflow
-              AnimatedContainer(
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            child: Column(
+              children: [
+                // Illustration box — clips overflow
+                AnimatedContainer(
                 duration: const Duration(milliseconds: 400),
                 width: double.infinity,
                 height: 270,
@@ -842,6 +852,7 @@ class _Slide1NfcPairingState extends State<_Slide1NfcPairing>
               ),
             ],
           ),
+          ),
         );
       },
     );
@@ -942,11 +953,13 @@ class _Slide2BiDirectionalState extends State<_Slide2BiDirectional>
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Column(
-        children: [
-          Container(
-            width: double.infinity,
-            height: 260,
+      child: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        child: Column(
+          children: [
+            Container(
+              width: double.infinity,
+              height: 260,
             clipBehavior: Clip.hardEdge, // ← FIX overflow
             decoration: BoxDecoration(
               color: const Color(0xFFEDE7FF),
@@ -1074,6 +1087,7 @@ class _Slide2BiDirectionalState extends State<_Slide2BiDirectional>
             ),
           ),
         ],
+      ),
       ),
     );
   }

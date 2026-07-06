@@ -231,9 +231,14 @@ class _OtpScreenState extends State<OtpScreen> with TickerProviderStateMixin {
     }
 
     if (!mounted) return;
-    Navigator.of(context).pushReplacementNamed(
-      hasProfile ? AppRoutes.home : AppRoutes.profileSetup,
-    );
+    if (hasProfile) {
+      Navigator.of(context).pushReplacementNamed(AppRoutes.home);
+    } else {
+      Navigator.of(context).pushReplacementNamed(
+        AppRoutes.profileSetup,
+        arguments: {'email': widget.email},
+      );
+    }
   }
 
   // ── Resend OTP ────────────────────────────────────────────────────────────
@@ -509,15 +514,22 @@ class _OtpScreenState extends State<OtpScreen> with TickerProviderStateMixin {
 
   Widget _buildResendRow() {
     final canResend = _secs <= 0;
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+    return Wrap(
+      spacing: 4,
+      alignment: WrapAlignment.center,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        Text(
-          "Didn't receive code?  ",
-          style: TextStyle(
-            fontFamily: 'Poppins',
-            fontSize: 13,
-            color: Colors.grey.shade500,
+        Flexible(
+          child: Text(
+            "Didn't receive code?  ",
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            softWrap: false,
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 13,
+              color: Colors.grey.shade500,
+            ),
           ),
         ),
         GestureDetector(

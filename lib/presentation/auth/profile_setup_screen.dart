@@ -1,23 +1,25 @@
 // lib/presentation/auth/profile_setup_screen.dart
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/constants/app_strings.dart';
 import '../../core/routes/app_routes.dart';
+import '../../providers/profile_provider.dart';
 
-class ProfileSetupScreen extends StatefulWidget {
-  const ProfileSetupScreen({super.key});
+class ProfileSetupScreen extends ConsumerStatefulWidget {
+  final String email;
+  const ProfileSetupScreen({super.key, required this.email});
 
   @override
-  State<ProfileSetupScreen> createState() => _ProfileSetupScreenState();
+  ConsumerState<ProfileSetupScreen> createState() =>
+      _ProfileSetupScreenState();
 }
 
-class _ProfileSetupScreenState extends State<ProfileSetupScreen>
+class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
     with TickerProviderStateMixin {
   final _nameController = TextEditingController();
-  final _phoneController = TextEditingController();
   final _nameFocus = FocusNode();
-  final _phoneFocus = FocusNode();
 
   bool _isSaving = false;
   bool _nameValid = false;
@@ -86,9 +88,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
   @override
   void dispose() {
     _nameController.dispose();
-    _phoneController.dispose();
     _nameFocus.dispose();
-    _phoneFocus.dispose();
     for (final c in _stagger) {
       c.dispose();
     }
@@ -110,20 +110,34 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     HapticFeedback.mediumImpact();
     setState(() => _isSaving = true);
 
-    // TODO: Save to Firestore
-    // await FirebaseFirestore.instance
-    //   .collection('users')
-    //   .doc(FirebaseAuth.instance.currentUser!.uid)
-    //   .set({
-    //     'name':        _nameController.text.trim(),
-    //     'phone':       _phoneController.text.trim(),
-    //     'avatarColor': _colorIdx,
-    //     'createdAt':   FieldValue.serverTimestamp(),
-    //   });
+    final service = ref.read(profileServiceProvider);
+    final success = await service.createUserProfile(
+      name: _nameController.text.trim(),
+      email: widget.email,
+      avatarColor: _colorIdx,
+    );
 
-    await Future.delayed(const Duration(milliseconds: 800));
     if (!mounted) return;
-    setState(() => _isSaving = false);
+
+    if (!success) {
+      setState(() => _isSaving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'Could not save profile. Please try again.',
+            style: TextStyle(fontFamily: 'Poppins'),
+          ),
+          backgroundColor: AppColors.sos,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      );
+      return;
+    }
+
+    HapticFeedback.heavyImpact();
     Navigator.of(context).pushReplacementNamed(AppRoutes.home);
   }
 
@@ -153,11 +167,12 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
                 _fade(
                   4,
                   TextButton(
-                    onPressed: () => Navigator.of(
-                      context,
-                    ).pushReplacementNamed(AppRoutes.home),
+                    onPressed: _isSaving
+                        ? null
+                        : () => Navigator.of(context)
+                            .pushReplacementNamed(AppRoutes.home),
                     child: Text(
-                      'Skip for now',
+                      AppStrings.skipForNow,
                       style: TextStyle(
                         fontFamily: 'Poppins',
                         fontSize: 13,
@@ -190,7 +205,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
           decoration: BoxDecoration(
             color: done || active
                 ? AppColors.primary
-                : AppColors.primary.withValues(alpha:0.2),
+                : AppColors.primary.withValues(alpha: 0.2),
             borderRadius: BorderRadius.circular(2),
           ),
         );
@@ -215,7 +230,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
               width: 90,
               height: 90,
               decoration: BoxDecoration(
-                color: color.withValues(alpha:0.15),
+                color: color.withValues(alpha: 0.15),
                 shape: BoxShape.circle,
                 border: Border.all(color: color, width: 2.5),
               ),
@@ -251,8 +266,10 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
         const SizedBox(height: 14),
 
         // Color chips
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+        Wrap(
+          spacing: 10,
+          runSpacing: 8,
+          alignment: WrapAlignment.center,
           children: List.generate(_colors.length, (i) {
             final sel = i == _colorIdx;
             return GestureDetector(
@@ -274,7 +291,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
                   boxShadow: sel
                       ? [
                           BoxShadow(
-                            color: _colors[i].withValues(alpha:0.4),
+                            color: _colors[i].withValues(alpha: 0.4),
                             blurRadius: 8,
                             spreadRadius: 1,
                           ),
@@ -294,7 +311,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     return Column(
       children: [
         const Text(
-          'Set Up Your Profile',
+          AppStrings.setupProfile,
           style: TextStyle(
             fontFamily: 'Poppins',
             fontSize: 24,
@@ -304,7 +321,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
         ),
         const SizedBox(height: 8),
         Text(
-          'This helps your trusted contacts\nidentify you instantly.',
+          AppStrings.setupProfileBody,
           textAlign: TextAlign.center,
           style: TextStyle(
             fontFamily: 'Poppins',
@@ -326,7 +343,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha:0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 16,
             offset: const Offset(0, 4),
           ),
@@ -334,45 +351,137 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
       ),
       child: Column(
         children: [
-          _field(
-            controller: _nameController,
-            focusNode: _nameFocus,
-            label: 'Full Name',
-            hint: 'e.g. Sarah Jenkins',
-            icon: Icons.person_rounded,
-            type: TextInputType.name,
-            limit: 30,
+          // Signed-in email chip
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.alternate_email_rounded,
+                  color: AppColors.primary,
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        AppStrings.signedInAs,
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade500,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      Text(
+                        widget.email,
+                        style: const TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF1A1A2E),
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(
+                  Icons.verified_rounded,
+                  color: AppColors.success,
+                  size: 18,
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 16),
-          _field(
-            controller: _phoneController,
-            focusNode: _phoneFocus,
-            label: 'Phone Number (optional)',
-            hint: '+1 000-000-0000',
-            icon: Icons.phone_rounded,
-            type: TextInputType.phone,
-            limit: 16,
+
+          // Name field
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                AppStrings.yourName,
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF1A1A2E),
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _nameController,
+                focusNode: _nameFocus,
+                keyboardType: TextInputType.name,
+                inputFormatters: [LengthLimitingTextInputFormatter(30)],
+                style: const TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF1A1A2E),
+                ),
+                decoration: InputDecoration(
+                  hintText: AppStrings.yourNameHint,
+                  hintStyle: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 14,
+                    color: Colors.grey.shade400,
+                  ),
+                  prefixIcon: Icon(
+                    Icons.person_rounded,
+                    color: AppColors.primary,
+                    size: 20,
+                  ),
+                  filled: true,
+                  fillColor: const Color(0xFFF0EFF5),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(
+                      color: AppColors.primary,
+                      width: 1.5,
+                    ),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
+
+          // Info note (phone added later)
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha:0.06),
+              color: AppColors.primary.withValues(alpha: 0.06),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Icon(
-                  Icons.verified_user_rounded,
+                  Icons.phone_android_rounded,
                   color: AppColors.primary,
                   size: 16,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Your profile is only visible to contacts you '
-                    'personally pair with via NFC.',
+                    AppStrings.phoneLaterHint,
                     style: TextStyle(
                       fontFamily: 'Poppins',
                       fontSize: 11,
@@ -389,70 +498,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     );
   }
 
-  Widget _field({
-    required TextEditingController controller,
-    required FocusNode focusNode,
-    required String label,
-    required String hint,
-    required IconData icon,
-    required TextInputType type,
-    required int limit,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontFamily: 'Poppins',
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: Color(0xFF1A1A2E),
-          ),
-        ),
-        const SizedBox(height: 8),
-        TextField(
-          controller: controller,
-          focusNode: focusNode,
-          keyboardType: type,
-          inputFormatters: [LengthLimitingTextInputFormatter(limit)],
-          style: const TextStyle(
-            fontFamily: 'Poppins',
-            fontSize: 15,
-            fontWeight: FontWeight.w500,
-            color: Color(0xFF1A1A2E),
-          ),
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle: TextStyle(
-              fontFamily: 'Poppins',
-              fontSize: 14,
-              color: Colors.grey.shade400,
-            ),
-            prefixIcon: Icon(icon, color: AppColors.primary, size: 20),
-            filled: true,
-            fillColor: const Color(0xFFF0EFF5),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(
-                color: AppColors.primary,
-                width: 1.5,
-              ),
-            ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 14,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   // ── Save button ───────────────────────────────────────────────────────────
   Widget _buildSaveBtn() {
     return SizedBox(
@@ -464,7 +509,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
           elevation: 0,
-          disabledBackgroundColor: AppColors.primary.withValues(alpha:0.35),
+          disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.35),
           disabledForegroundColor: Colors.white70,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
@@ -483,7 +528,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: const [
                   Text(
-                    'Save & Continue',
+                    AppStrings.saveProfile,
                     style: TextStyle(
                       fontFamily: 'Poppins',
                       fontSize: 16,

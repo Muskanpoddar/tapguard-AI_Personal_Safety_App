@@ -377,18 +377,24 @@ class _LoginScreenState extends State<LoginScreen>
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            GestureDetector(
-              onTap: () {},
-              child: Text(
-                AppStrings.privacyPolicy,
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 12,
-                  color: Colors.grey.shade500,
-                  decoration: TextDecoration.underline,
+            Flexible(
+              child: GestureDetector(
+                onTap: () {},
+                child: Text(
+                  AppStrings.privacyPolicy,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 12,
+                    color: Colors.grey.shade500,
+                    decoration: TextDecoration.underline,
+                  ),
                 ),
               ),
             ),
+            const SizedBox(width: 6),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8),
               child: Container(
@@ -400,15 +406,21 @@ class _LoginScreenState extends State<LoginScreen>
                 ),
               ),
             ),
-            GestureDetector(
-              onTap: () {},
-              child: Text(
-                AppStrings.termsOfService,
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 12,
-                  color: Colors.grey.shade500,
-                  decoration: TextDecoration.underline,
+            const SizedBox(width: 6),
+            Flexible(
+              child: GestureDetector(
+                onTap: () {},
+                child: Text(
+                  AppStrings.termsOfService,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 12,
+                    color: Colors.grey.shade500,
+                    decoration: TextDecoration.underline,
+                  ),
                 ),
               ),
             ),
