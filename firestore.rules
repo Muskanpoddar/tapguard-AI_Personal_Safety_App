@@ -4,26 +4,98 @@ service cloud.firestore {
 
     // ── Users collection ──────────────────────────────────────────────────
     match /users/{uid} {
-      allow read: if request.auth != null && request.auth.uid == uid;
-      allow write: if request.auth != null && request.auth.uid == uid;
+      allow read, write: if request.auth != null
+                          && request.auth.uid == uid;
 
       // User's contacts sub-collection
       match /contacts/{contactId} {
-        allow read, write: if request.auth != null && request.auth.uid == uid;
+        allow read, write: if request.auth != null
+                            && request.auth.uid == uid;
       }
 
       // User's notifications sub-collection
       match /notifications/{notifId} {
-        allow read, write: if request.auth != null && request.auth.uid == uid;
+        allow read, write: if request.auth != null
+                            && request.auth.uid == uid;
+      }
+
+      // User's geofences sub-collection
+      match /geofence/{geofenceId} {
+        allow read, write: if request.auth != null
+                            && request.auth.uid == uid;
+      }
+
+      // User's sharedSessions sub-collection — used for bi-directional
+      // location sharing. The OWNER of a session writes a mirror record
+      // into the RECEIVER's subcollection so the receiver phone can find
+      // the session (their in-memory cache is empty). The receiver only
+      // ever reads their own.
+      //
+      // Two write paths, both gated by `ownerUid == request.auth.uid`
+      // so a user can only claim a session as their own if they
+      // actually own it:
+      //   1. Owner writes to their own   users/{ownerUid}/sharedSessions/...
+      //      → allowed by parent rule (auth.uid == uid)
+      //   2. Owner writes to receiver's  users/{receiverUid}/sharedSessions/...
+      //      → allowed by this rule (ownerUid in payload == auth.uid)
+      match /sharedSessions/{sessionId} {
+        allow read: if request.auth != null
+                    && request.auth.uid == uid;
+        allow create, update: if request.auth != null
+          && request.resource.data.ownerUid == request.auth.uid;
+        allow delete: if false;
       }
     }
 
     // ── Sessions collection ───────────────────────────────────────────────
-    // Both owner and receiver need read/write access to the session doc
+    // Two-way location sharing needs:
+    //   * Browser receiver (shareUrl opened in a browser, anonymous
+    //     sign-in via session.html) — must be able to READ the session
+    //     immediately and WRITE its own lat/lng fields back.
+    //   * In-app owner — must be able to CREATE the session, READ it,
+    //     and WRITE anything.
+    //   * In-app paired receiver (real account) — must be able to
+    //     READ + WRITE anything within the session.
+    //
+    // Reads are open (`if true`) because the shareUrl itself is the
+    // capability: Firestore session IDs are 20 random chars so guessing
+    // is infeasible, and a leaked URL already leaks its location to
+    // whoever has it. This is the setup that was working in the user's
+    // original deployment.
+    //
+    // Writes are scoped:
+    //   * Owner (request.auth.uid == ownerUid) — can write anything
+    //   * Signed-in receiver (auth.uid == receiverUid) — can write
+    //     anything (their real auth UID matches the receiverUid set
+    //     during createSessionForContact)
+    //   * Anonymous browser receiver — can write ONLY the location
+    //     fields they own. Enforced server-side by diff().affectedKeys()
+    //     so they cannot, for example, overwrite the sender's coords
+    //     or flip isActive to false.
     match /sessions/{sessionId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null;
-      allow update: if request.auth != null;
+      allow read: if true;
+      allow create: if request.auth != null &&
+        request.resource.data.ownerUid is string &&
+        request.resource.data.ownerUid.size() > 0;
+      allow update: if (
+        // Owner (in-app) — full write access
+        (request.auth != null &&
+         request.auth.uid == resource.data.ownerUid)
+        ||
+        // Signed-in paired receiver — full write access (in-app bi-directional)
+        (request.auth != null &&
+         request.auth.uid == resource.data.receiverUid)
+        ||
+        // Anyone signed-in (incl. anonymous browser) — receivers-only fields.
+        // affectedKeys() returns the list of top-level fields being
+        // changed; .hasOnly([...]) enforces the entire diff is contained
+        // in the allowed set. No spoofing ownerName, isActive, ownerLat, etc.
+        (request.auth != null &&
+         request.resource.data.diff(resource.data).affectedKeys()
+           .hasOnly(['receiverLat', 'receiverLng', 'receiverAccuracy',
+                     'receiverJoined', 'receiverJoinedAt',
+                     'lastSafeAt', 'isSafe']))
+      );
       allow delete: if false;
     }
   }
