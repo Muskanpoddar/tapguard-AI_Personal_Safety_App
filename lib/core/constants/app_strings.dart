@@ -40,9 +40,13 @@ class AppStrings {
   // ── Auth ──────────────────────────────────────────────────────────────────
   static const String welcomeTitle   = 'Welcome to TapGuard';
   static const String welcomeBody    =
-      'Your safety is our priority. Enter your phone number to get started.';
+      'Your safety is our priority. Enter your email to get started.';
+  static const String emailAddress   = 'Email Address';
+  static const String emailPlaceholder = 'you@gmail.com';
+  static const String enterEmailBody =
+      'Enter your email address and we\'ll send a verification code instantly.';
   static const String phoneNumber    = 'Phone Number';
-  static const String phonePlaceholder = '000-000-0000';
+  static const String phonePlaceholder = '+1 000-000-0000';
   static const String sendOtp        = 'Send OTP';
   static const String nfcEnabledPrivacy = 'NFC ENABLED PRIVACY';
   static const String privacyPolicy  = 'Privacy Policy';
@@ -54,11 +58,60 @@ class AppStrings {
   static const String otpSentTo      = 'Code sent to ';
   static const String resendOtp      = 'Resend OTP';
   static const String verifyBtn      = 'Verify & Continue';
+  static const String verifyEmailBody = 'We sent a 6-digit code to';
 
   static const String setupProfile   = 'Setup Your Profile';
+  static const String setupProfileBody =
+      'This helps your trusted contacts identify you instantly.';
   static const String yourName       = 'Your Name';
-  static const String emergencyContact = 'Emergency Contact Number';
+  static const String yourNameHint   = 'e.g. Sarah Jenkins';
+  static const String signedInAs     = 'Signed in as';
+  static const String phoneLaterHint =
+      'You can add your phone number later from your profile '
+      '(required for SOS SMS alerts).';
   static const String saveProfile    = 'Save & Continue';
+
+  // ── Account / Profile (in-app) ───────────────────────────────────────────
+  static const String account        = 'Account';
+  static const String editProfile    = 'Edit Profile';
+  static const String saveChanges    = 'Save Changes';
+  static const String accountSection = 'ACCOUNT';
+  static const String appSection     = 'APP';
+  static const String logoutConfirmTitle = 'Log out?';
+  static const String logoutConfirmBody =
+      'You will need to verify your email again to sign back in.';
+  static const String addContact     = 'Add Trusted Contact';
+  static const String contactName    = 'Full Name';
+  static const String contactEmail   = 'Email';
+  static const String contactPhone   = 'Phone (for SOS SMS)';
+  static const String primaryContact = 'Primary Emergency Contact';
+  static const String notifyFirst    =
+      'Notify this contact first in emergencies';
+  static const String priorityLevel  = 'Priority Level';
+  static const String priorityHint   =
+      'Priority 1 is notified first in SOS emergencies';
+  static const String priorityHigh   = 'High';
+  static const String priorityMedium = 'Medium';
+  static const String priorityLow    = 'Low';
+  static const String noContactsYet  = 'No Trusted Contacts Yet';
+  static const String noContactsBody =
+      'Add trusted contacts to enable location\n'
+      'sharing and emergency notifications';
+  static const String removeContactTitle = 'Remove Contact?';
+  static const String removeContactBodyPrefix = 'Are you sure you want to remove';
+  static const String removeContactBodySuffix = '?';
+  static const String remove         = 'Remove';
+  static const String contactRemoved = 'Contact removed successfully';
+  static const String contactAdded   = 'added';
+  static const String contactSetEmergency = 'is now your primary emergency contact';
+  static const String contactUnsetEmergency =
+      'is no longer your primary emergency contact';
+  static const String profileUpdated = 'Profile updated successfully';
+  static const String pleaseEnterName = 'Please enter a name';
+  static const String pleaseFillAll  = 'Please fill all fields';
+  static const String pleaseEnterEmail = 'Please enter a valid email';
+  static const String pleaseEnterPhone = 'Please enter a phone number';
+  static const String editContactSoon = 'Edit functionality coming soon';
 
   // ── Home ──────────────────────────────────────────────────────────────────
   static const String systemReady    = 'SYSTEM READY';
