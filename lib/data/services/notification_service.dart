@@ -84,6 +84,9 @@ class NotificationService {
     try {
       await _db.collection('users').doc(uid).set({
         'oneSignalPlayerId': playerId,
+        // Alias so the Cloud Function in functions/index.js (which reads
+        // fcmToken) can find a push target too.
+        'fcmToken': playerId,
         'playerIdUpdatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
       debugPrint('OneSignal player ID saved: $playerId');
@@ -101,6 +104,19 @@ class NotificationService {
     required String type,
     Map<String, String>? extraData,
   }) async {
+    // Placeholder UIDs (e.g. 'qr_contact_1783105180829', 'nfc_*') come
+    // from pairings where the remote party was never authenticated, so
+    // there is no real /users/{uid} doc and the Firestore rule denies
+    // cross-user reads anyway. Skip the push instead of waiting for
+    // PERMISSION_DENIED.
+    if (targetUid.startsWith('qr_contact_') ||
+        targetUid.startsWith('nfc_') ||
+        targetUid.contains('/') ||
+        targetUid.isEmpty) {
+      debugPrint('Skipping push for non-account contact uid: $targetUid');
+      return false;
+    }
+
     try {
       // 1. Get target user's OneSignal player ID from Firestore
       final userDoc = await _db.collection('users').doc(targetUid).get();
