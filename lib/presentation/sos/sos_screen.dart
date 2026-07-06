@@ -1,51 +1,53 @@
 // lib/presentation/sos/sos_screen.dart
 //
-// Full SOS Emergency Screen
-// ─────────────────────────
-// Features:
-//   - Big red TRIGGER SOS button
-//   - Pulsing red animation when active
-//   - Sends location to trusted contacts via Firestore
-//   - Push notifications to contacts via OneSignal
-//   - Flashing red UI when SOS is active
-//   - Hold-to-cancel for accidental triggers
-//   - Vibration pattern for urgency
+// SOS Emergency Screen — pure UI.
+//
+// All dispatch/cancel business logic lives in `SosService` and is
+// orchestrated by `sosControllerProvider` (`SosState` machine).
+// This file owns:
+//   * The big red TRIGGER SOS button + pulsing animation
+//   * Flashing red background + vibration when SOS is active
+//   * Hold-to-cancel gesture (accidental trigger guard)
+//   * "I Am Safe" button
+//   * Risk-detection auto-trigger subscription
 //
 // Bi-directional: also listens for incoming SOS alerts from contacts
+// (handled elsewhere — `NotificationService`).
 
 import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:geolocator/geolocator.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:vibration/vibration.dart';
 import '../../core/constants/app_colors.dart';
 import '../../data/services/risk_detection_service.dart';
+import '../../data/services/sos_service.dart';
+import '../../providers/profile_provider.dart';
+import '../../providers/sos_provider.dart';
 
-class SosScreen extends StatefulWidget {
+class SosScreen extends ConsumerStatefulWidget {
   const SosScreen({super.key});
 
   @override
-  State<SosScreen> createState() => _SosScreenState();
+  ConsumerState<SosScreen> createState() => _SosScreenState();
 }
 
-class _SosScreenState extends State<SosScreen>
+class _SosScreenState extends ConsumerState<SosScreen>
     with TickerProviderStateMixin, WidgetsBindingObserver {
   final _risk = RiskDetectionService();
-  final _db  = FirebaseFirestore.instance;
-  final _auth = FirebaseAuth.instance;
 
-  // ── State ──────────────────────────────────────────────────────────────────
-  bool _sosActive      = false;
-  bool _sendingAlert  = false;
-  bool _hasVibrator   = false;
-  bool _holdReleased  = false;
+  // Local UI state
+  bool _hasVibrator = false;
+  bool _holdReleased = false;
   Timer? _flashTimer;
   StreamSubscription? _riskSub;
 
-  // ── Animation ──────────────────────────────────────────────────────────────
+  /// Rolling buffer of dispatch events for the live log widget.
+  final List<DispatchEvent> _dispatchLog = [];
+  StreamSubscription? _dispatchSub;
+
+  // Animation controllers
   late AnimationController _pulseCtrl;
   late AnimationController _flashCtrl;
   late AnimationController _scaleCtrl;
@@ -57,9 +59,7 @@ class _SosScreenState extends State<SosScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
-    // Check if device has vibrator
     _checkVibrator();
-
     _initAnimations();
     _listenRiskStream();
   }
@@ -103,8 +103,11 @@ class _SosScreenState extends State<SosScreen>
     _riskSub = _risk.riskStream.listen((result) {
       if (!mounted) return;
       if (result.shouldTriggerSos) {
-        // Auto-triggered by risk engine
-        _triggerSos(fromRisk: true);
+        // Auto-triggered by the risk engine. Guard against double-fires.
+        final current = ref.read(sosControllerProvider);
+        if (current == SosState.idle) {
+          ref.read(sosControllerProvider.notifier).trigger(fromRisk: true);
+        }
       }
     });
   }
@@ -115,7 +118,8 @@ class _SosScreenState extends State<SosScreen>
       _pauseSos();
     }
     if (state == AppLifecycleState.resumed) {
-      if (_sosActive) _resumeSos();
+      final isActive = ref.read(sosActiveProvider);
+      if (isActive) _startFlashEffect();
     }
   }
 
@@ -124,10 +128,7 @@ class _SosScreenState extends State<SosScreen>
     _tryVibrateCancel();
   }
 
-  void _resumeSos() {
-    if (_sosActive) _startFlashEffect();
-  }
-
+  // ── Vibration helpers ─────────────────────────────────────────────────────
   void _tryVibratePattern() {
     if (!_hasVibrator) return;
     try {
@@ -149,142 +150,47 @@ class _SosScreenState extends State<SosScreen>
     } catch (_) {}
   }
 
-  // ── TRIGGER SOS ─────────────────────────────────────────────────────────────
-  Future<void> _triggerSos({required bool fromRisk}) async {
-    if (_sendingAlert) return;
-    setState(() => _sendingAlert = true);
+  // ── TRIGGER SOS (UI-side orchestration) ──────────────────────────────────
+  Future<void> _triggerSosFromTap() async {
     HapticFeedback.heavyImpact();
-
     _flashTimer?.cancel();
-
-    // Fire vibration pattern
     _tryVibratePattern();
 
-    // Update Firestore SOS flag
-    await _updateSosFirestore(active: true);
-
-    // Get GPS and dispatch to contacts
-    await _dispatchSosToContacts();
-
-    if (!mounted) return;
-    setState(() {
-      _sosActive   = true;
-      _sendingAlert = false;
-    });
-
-    _startFlashEffect();
-  }
-
-  Future<void> _updateSosFirestore({required bool active}) async {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) return;
-    try {
-      await _db.collection('users').doc(uid).set({
-        'sosActive':      active,
-        'sosTriggeredAt': active ? FieldValue.serverTimestamp() : null,
-      }, SetOptions(merge: true));
-    } catch (_) {}
-  }
-
-  Future<void> _dispatchSosToContacts() async {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) return;
-
-    // Get user's name
-    String name = 'User';
-    double? lat;
-    double? lng;
-    try {
-      final doc = await _db.collection('users').doc(uid).get();
-      name = doc.data()?['name'] ?? name;
-    } catch (_) {}
-
-    // Get current location for SMS
-    try {
-      final pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
-      );
-      lat = pos.latitude;
-      lng = pos.longitude;
-    } catch (_) {}
-
-    // Build location link
-    final locationLink = (lat != null && lng != null)
-        ? ' Location: https://maps.google.com/?q=$lat,$lng'
-        : '';
-
-    // Get trusted contacts sorted by priority (1 = highest)
-    final contactsSnap = await _db
-        .collection('users')
-        .doc(uid)
-        .collection('contacts')
-        .orderBy('priority', descending: false)
-        .get();
-
-    for (final doc in contactsSnap.docs) {
-      final phone = doc.data()['phoneNumber'] as String? ?? '';
-      final contactName = doc.data()['name'] as String? ?? 'Contact';
-      final priority = doc.data()['priority'] as int? ?? 99;
-
-      // Send SMS to this contact
-      if (phone.isNotEmpty) {
-        await _sendSms(phone, 'SOS ALERT! $name needs help immediately.$locationLink');
-      }
-
-      // Write to their Firestore notifications
-      if (phone.isNotEmpty || doc.id.isNotEmpty) {
-        await _writeNotification(doc.id, uid, name);
-      }
-
-      // Log priority dispatch
-      debugPrint('SOS dispatched to $contactName (priority $priority)');
+    // Ask for SEND_SMS once — a denial just falls back to Firestore-only
+    // dispatch (the existing behaviour), no SOS is blocked.
+    final service = ref.read(sosServiceProvider);
+    if (!await service.requestSmsPermission()) {
+      debugPrint('[SosScreen] SMS permission denied — Firestore-only mode.');
     }
+
+    // Reset log + counter for a fresh dispatch run.
+    setState(_dispatchLog.clear);
+    ref.read(sosDispatchedCountProvider.notifier).reset();
+    _listenDispatchStream();
+
+    // Fire-and-forget — the provider handles state transitions. We just
+    // react to them via `ref.listen` in `build()`.
+    unawaited(
+      ref.read(sosControllerProvider.notifier).trigger(fromRisk: false),
+    );
   }
 
-  Future<void> _sendSms(String phone, String message) async {
-    try {
-      final smsUri = Uri(
-        scheme: 'sms',
-        path: phone,
-        queryParameters: {'body': message},
-      );
-      if (await canLaunchUrl(smsUri)) {
-        await launchUrl(smsUri);
+  /// Subscribe to per-contact dispatch events so the log + counter stay
+  /// in sync with what the service is doing.
+  void _listenDispatchStream() {
+    _dispatchSub?.cancel();
+    _dispatchSub = ref.read(sosServiceProvider).dispatchStream.listen((e) {
+      if (!mounted) return;
+      setState(() => _dispatchLog.add(e));
+      // Count anything that reached a terminal state (sent / failed /
+      // skipped) toward the "X / Y contacts notified" denominator.
+      if (e.status != DispatchStatus.sending) {
+        ref.read(sosDispatchedCountProvider.notifier).increment();
       }
-    } catch (e) {
-      debugPrint('SMS launch error: $e');
-    }
-  }
-
-  Future<void> _writeNotification(String contactUid, String fromUid, String fromName) async {
-    try {
-      await _db
-          .collection('users')
-          .doc(contactUid)
-          .collection('notifications')
-          .add({
-        'type':      'sos_alert',
-        'fromUid':   fromUid,
-        'fromName':  fromName,
-        'message':   'SOS ALERT! $fromName needs help immediately.',
-        'createdAt': FieldValue.serverTimestamp(),
-        'read':      false,
-      });
-    } catch (_) {}
-  }
-
-  void _startFlashEffect() {
-    _flashTimer?.cancel();
-    _flashTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
-      if (!mounted || !_sosActive) {
-        _flashTimer?.cancel();
-        return;
-      }
-      HapticFeedback.lightImpact();
     });
   }
 
-  // ── CANCEL SOS (hold 2s) ───────────────────────────────────────────────────
+  // ── CANCEL (hold 2s) ─────────────────────────────────────────────────────
   void _onHoldStart() {
     setState(() => _holdReleased = false);
     _tryVibrateDuration(50);
@@ -294,29 +200,48 @@ class _SosScreenState extends State<SosScreen>
     if (!_holdReleased) {
       _tryVibrateCancel();
       _flashTimer?.cancel();
-      _updateSosFirestore(active: false);
       _risk.cancelSos();
+      unawaited(ref.read(sosControllerProvider.notifier).cancel());
       if (mounted) Navigator.of(context).pop();
     }
   }
 
   void _onHoldConfirm() {
-    // User held for 2s — confirm cancel
     setState(() => _holdReleased = true);
     HapticFeedback.heavyImpact();
     _onHoldEnd();
   }
 
-  // ── "I am Safe" — cancel SOS ───────────────────────────────────────────────
+  // ── "I Am Safe" ──────────────────────────────────────────────────────────
   Future<void> _iAmSafe() async {
     HapticFeedback.heavyImpact();
     _tryVibrateCancel();
     _flashTimer?.cancel();
 
-    await _updateSosFirestore(active: false);
+    await ref.read(sosControllerProvider.notifier).cancel();
     await _risk.sendSafetyConfirmation();
 
     if (mounted) Navigator.of(context).pop();
+  }
+
+  // ── Side effects when state changes ──────────────────────────────────────
+  void _onSosActiveChanged(bool isActive) {
+    if (isActive) {
+      _startFlashEffect();
+    } else {
+      _flashTimer?.cancel();
+    }
+  }
+
+  void _startFlashEffect() {
+    _flashTimer?.cancel();
+    _flashTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
+      if (!mounted || !ref.read(sosActiveProvider)) {
+        _flashTimer?.cancel();
+        return;
+      }
+      HapticFeedback.lightImpact();
+    });
   }
 
   @override
@@ -324,6 +249,7 @@ class _SosScreenState extends State<SosScreen>
     WidgetsBinding.instance.removeObserver(this);
     _flashTimer?.cancel();
     _riskSub?.cancel();
+    _dispatchSub?.cancel();
     _pulseCtrl.dispose();
     _flashCtrl.dispose();
     _scaleCtrl.dispose();
@@ -334,48 +260,63 @@ class _SosScreenState extends State<SosScreen>
   // ══════════════════════════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
+    // React to provider state changes (side effects, not build output).
+    ref.listen<SosState>(sosControllerProvider, (prev, next) {
+      final wasActive = prev == SosState.active;
+      final isActive = next == SosState.active;
+      if (wasActive != isActive) _onSosActiveChanged(isActive);
+    });
+
+    final state = ref.watch(sosControllerProvider);
+    final isActive = state == SosState.active;
+    final isBusy =
+        state == SosState.triggering || state == SosState.cancelling;
+
     return Scaffold(
       // Flashing red background when SOS is active
       body: AnimatedBuilder(
         animation: _flashCtrl,
         builder: (_, child) => Container(
-          color: _sosActive
-              ? AppColors.sos.withValues(alpha:0.08 * _flashOpacity.value)
+          color: isActive
+              ? AppColors.sos.withValues(alpha: 0.08 * _flashOpacity.value)
               : Colors.transparent,
           child: child,
         ),
-        child: _buildBody(),
+        child: _buildBody(isActive: isActive, isBusy: isBusy),
       ),
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody({required bool isActive, required bool isBusy}) {
     return SafeArea(
       child: Stack(
         children: [
-          // Main content
           Column(
             children: [
-              _buildTopBar(),
-              Expanded(child: _buildMainContent()),
+              _buildTopBar(isActive: isActive),
+              Expanded(child: _buildMainContent(isActive: isActive, isBusy: isBusy)),
               _buildBottomActions(),
             ],
           ),
 
-          // Pulsing ring behind the button
-          if (!_sosActive)
+          // Pulsing ring behind the button (only when idle).
+          // IgnorePointer so the decorative 280×280 hit-area doesn't sit
+          // on top of the SOS button inside the Stack and swallow its taps.
+          if (!isActive)
             Positioned.fill(
-              child: Center(
-                child: AnimatedBuilder(
-                  animation: _pulseCtrl,
-                  builder: (_, _) => Transform.scale(
-                    scale: _pulseScale.value,
-                    child: Container(
-                      width: 280,
-                      height: 280,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: AppColors.sos.withValues(alpha:0.06),
+              child: IgnorePointer(
+                child: Center(
+                  child: AnimatedBuilder(
+                    animation: _pulseCtrl,
+                    builder: (_, _) => Transform.scale(
+                      scale: _pulseScale.value,
+                      child: Container(
+                        width: 280,
+                        height: 280,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppColors.sos.withValues(alpha: 0.06),
+                        ),
                       ),
                     ),
                   ),
@@ -387,7 +328,7 @@ class _SosScreenState extends State<SosScreen>
     );
   }
 
-  Widget _buildTopBar() {
+  Widget _buildTopBar({required bool isActive}) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
       child: Row(
@@ -402,7 +343,7 @@ class _SosScreenState extends State<SosScreen>
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha:0.06),
+                    color: Colors.black.withValues(alpha: 0.06),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -416,30 +357,31 @@ class _SosScreenState extends State<SosScreen>
             ),
           ),
           const Spacer(),
-          // Live indicator when SOS active
-          if (_sosActive)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: AppColors.sos.withValues(alpha:0.12),
-                borderRadius: BorderRadius.circular(50),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _PulsingDot(color: AppColors.sos),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'SOS ACTIVE',
-                    style: TextStyle(
-                      fontFamily: 'Poppins',
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.sos,
-                      letterSpacing: 0.8,
+          if (isActive)
+            Flexible(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.sos.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(50),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _PulsingDot(color: AppColors.sos),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'SOS ACTIVE',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.sos,
+                        letterSpacing: 0.8,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           const Spacer(),
@@ -449,49 +391,211 @@ class _SosScreenState extends State<SosScreen>
     );
   }
 
-  Widget _buildMainContent() {
+  Widget _buildMainContent({required bool isActive, required bool isBusy}) {
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Status badge
-            _buildStatusBadge(),
-
+            _buildStatusBadge(isActive: isActive),
             const SizedBox(height: 32),
-
-            // Main SOS button
-            _buildSosButton(),
-
-            const SizedBox(height: 24),
-
-            if (_sendingAlert)
-              _buildSendingStatus(),
-
-            const SizedBox(height: 28),
-
-            // Info card
-            _buildInfoCard(),
+            _buildSosButton(isActive: isActive, isBusy: isBusy),
+            if (isBusy || isActive) ...[
+              const SizedBox(height: 20),
+              _buildDispatchCounter(isActive: isActive, isBusy: isBusy),
+              if (_dispatchLog.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                _buildDispatchLog(),
+              ],
+            ],
+            if (isBusy) ...[
+              const SizedBox(height: 24),
+              const Column(
+                children: [
+                  SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: CircularProgressIndicator(
+                      color: AppColors.sos,
+                      strokeWidth: 3,
+                    ),
+                  ),
+                  SizedBox(height: 12),
+                  Text(
+                    'Sending SOS to contacts…',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.sos,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            if (!isBusy && !isActive) ...[
+              const SizedBox(height: 28),
+              _buildInfoCard(),
+            ],
           ],
         ),
       ),
     );
   }
 
-  Widget _buildStatusBadge() {
-    final color = _sosActive ? AppColors.sos : AppColors.primary;
-    final label = _sosActive
-        ? 'SOS ACTIVATED'
-        : 'READY TO SEND';
+  // ── Live dispatch counter ("X / Y contacts notified") ────────────────────
+  Widget _buildDispatchCounter({
+    required bool isActive,
+    required bool isBusy,
+  }) {
+    final myUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final contactsAsync = ref.watch(userContactsProvider(myUid));
+    final total = contactsAsync.maybeWhen(
+      data: (list) => list.length,
+      orElse: () => 0,
+    );
+    final sent =
+        _dispatchLog.where((e) => e.status == DispatchStatus.sent).length;
+    final dispatched =
+        ref.watch(sosDispatchedCountProvider);
+    final allDone = !isBusy && dispatched >= total && total > 0;
+    final color = allDone
+        ? AppColors.success
+        : (isBusy ? AppColors.sos : AppColors.primary);
+    final label = allDone
+        ? '$sent / $total contacts notified'
+        : '$dispatched / $total contacts notified';
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(50),
+        border: Border.all(color: color.withValues(alpha: 0.30)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _PulsingDot(color: color),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              softWrap: false,
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: color,
+                letterSpacing: 0.6,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Live per-contact dispatch log ────────────────────────────────────────
+  Widget _buildDispatchLog() {
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 240),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ListView.separated(
+        shrinkWrap: true,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        physics: const BouncingScrollPhysics(),
+        itemCount: _dispatchLog.length,
+        separatorBuilder: (_, _) => const Divider(
+          height: 12,
+          thickness: 0.5,
+          color: Color(0x11000000),
+        ),
+        itemBuilder: (_, i) => _dispatchRow(_dispatchLog[i]),
+      ),
+    );
+  }
+
+  Widget _dispatchRow(DispatchEvent e) {
+    final (icon, color, label) = switch (e.status) {
+      DispatchStatus.sending => (
+          Icons.hourglass_top_rounded,
+          Colors.grey.shade500,
+          'sending…',
+        ),
+      DispatchStatus.sent => (
+          Icons.check_circle_rounded,
+          AppColors.success,
+          'SMS sent',
+        ),
+      DispatchStatus.failed => (
+          Icons.error_rounded,
+          AppColors.sos,
+          e.error ?? 'failed',
+        ),
+      DispatchStatus.skipped => (
+          Icons.block_rounded,
+          Colors.grey.shade500,
+          e.error ?? 'skipped',
+        ),
+    };
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            e.contactName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1A1A2E),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontFamily: 'Poppins',
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: color,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatusBadge({required bool isActive}) {
+    final color = isActive ? AppColors.sos : AppColors.primary;
+    final label = isActive ? 'SOS ACTIVATED' : 'READY TO SEND';
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 400),
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       decoration: BoxDecoration(
-        color: color.withValues(alpha:0.10),
+        color: color.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(50),
-        border: Border.all(color: color.withValues(alpha:0.30)),
+        border: Border.all(color: color.withValues(alpha: 0.30)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -513,13 +617,13 @@ class _SosScreenState extends State<SosScreen>
     );
   }
 
-  Widget _buildSosButton() {
+  Widget _buildSosButton({required bool isActive, required bool isBusy}) {
     return GestureDetector(
-      onTap: _sosActive ? null : () => _triggerSos(fromRisk: false),
+      onTap: (isActive || isBusy) ? null : _triggerSosFromTap,
       child: AnimatedBuilder(
         animation: _pulseCtrl,
         builder: (_, child) => Transform.scale(
-          scale: _sosActive ? 1.0 : _pulseScale.value,
+          scale: isActive ? 1.0 : _pulseScale.value,
           child: child,
         ),
         child: Container(
@@ -530,7 +634,7 @@ class _SosScreenState extends State<SosScreen>
             color: AppColors.sos,
             boxShadow: [
               BoxShadow(
-                color: AppColors.sos.withValues(alpha:0.5),
+                color: AppColors.sos.withValues(alpha: 0.5),
                 blurRadius: 40,
                 spreadRadius: 8,
                 offset: const Offset(0, 8),
@@ -541,13 +645,13 @@ class _SosScreenState extends State<SosScreen>
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
-                _sosActive ? Icons.warning_rounded : Icons.sos_rounded,
+                isActive ? Icons.warning_rounded : Icons.sos_rounded,
                 color: Colors.white,
                 size: 72,
               ),
               const SizedBox(height: 8),
               Text(
-                _sosActive ? 'SOS ACTIVE' : 'TRIGGER SOS',
+                isActive ? 'SOS ACTIVE' : 'TRIGGER SOS',
                 style: const TextStyle(
                   fontFamily: 'Poppins',
                   fontSize: 18,
@@ -563,31 +667,6 @@ class _SosScreenState extends State<SosScreen>
     );
   }
 
-  Widget _buildSendingStatus() {
-    return Column(
-      children: [
-        const SizedBox(
-          width: 32,
-          height: 32,
-          child: CircularProgressIndicator(
-            color: AppColors.sos,
-            strokeWidth: 3,
-          ),
-        ),
-        const SizedBox(height: 12),
-        const Text(
-          'Sending SOS to contacts…',
-          style: TextStyle(
-            fontFamily: 'Poppins',
-            fontSize: 15,
-            fontWeight: FontWeight.w600,
-            color: AppColors.sos,
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildInfoCard() {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -596,7 +675,7 @@ class _SosScreenState extends State<SosScreen>
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha:0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -611,12 +690,12 @@ class _SosScreenState extends State<SosScreen>
           const SizedBox(height: 10),
           _infoRow(
             Icons.notifications_rounded,
-            'Push notifications sent to 5 contacts',
+            'Push notifications sent to trusted contacts',
           ),
           const SizedBox(height: 10),
           _infoRow(
-            Icons.shield_rounded,
-            'Emergency services can be contacted',
+            Icons.sms_rounded,
+            'SMS sent to contacts with your GPS link',
           ),
         ],
       ),
@@ -630,7 +709,7 @@ class _SosScreenState extends State<SosScreen>
           width: 34,
           height: 34,
           decoration: BoxDecoration(
-            color: AppColors.sos.withValues(alpha:0.08),
+            color: AppColors.sos.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(10),
           ),
           child: Icon(icon, color: AppColors.sos, size: 18),
@@ -656,11 +735,17 @@ class _SosScreenState extends State<SosScreen>
       padding: const EdgeInsets.all(20),
       child: Column(
         children: [
-          // Hold-to-cancel
-          if (_sosActive) ...[
-            _buildHoldToCancel(),
-            const SizedBox(height: 12),
-          ],
+          // Hold-to-cancel (only when active)
+          Consumer(
+            builder: (context, ref, _) {
+              final isActive = ref.watch(sosActiveProvider);
+              if (!isActive) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _buildHoldToCancel(),
+              );
+            },
+          ),
 
           // I am Safe button
           _buildSafeButton(),
@@ -698,9 +783,8 @@ class _SosScreenState extends State<SosScreen>
   Widget _buildHoldToCancel() {
     return GestureDetector(
       onLongPressStart: (_) => _onHoldStart(),
-      onLongPressEnd:   (_) => _onHoldEnd(),
+      onLongPressEnd: (_) => _onHoldEnd(),
       onLongPressMoveUpdate: (details) {
-        // If finger moved significantly, treat as cancelled
         if (details.globalPosition.distance > 100) {
           _onHoldConfirm();
         }
@@ -709,9 +793,9 @@ class _SosScreenState extends State<SosScreen>
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 18),
         decoration: BoxDecoration(
-          color: AppColors.sos.withValues(alpha:0.08),
+          color: AppColors.sos.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.sos.withValues(alpha:0.3)),
+          border: Border.all(color: AppColors.sos.withValues(alpha: 0.3)),
         ),
         child: Column(
           children: [
@@ -757,7 +841,7 @@ class _SosScreenState extends State<SosScreen>
           borderRadius: BorderRadius.circular(14),
           boxShadow: [
             BoxShadow(
-              color: AppColors.success.withValues(alpha:0.35),
+              color: AppColors.success.withValues(alpha: 0.35),
               blurRadius: 16,
               offset: const Offset(0, 6),
             ),
@@ -787,7 +871,9 @@ class _SosScreenState extends State<SosScreen>
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
 // Small pulsing dot
+// ═══════════════════════════════════════════════════════════════════════════
 class _PulsingDot extends StatefulWidget {
   final Color color;
   const _PulsingDot({required this.color});
@@ -823,7 +909,7 @@ class _PulsingDotState extends State<_PulsingDot>
         height: 10,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: widget.color.withValues(alpha:0.5 + _ctrl.value * 0.5),
+          color: widget.color.withValues(alpha: 0.5 + _ctrl.value * 0.5),
         ),
       ),
     );
