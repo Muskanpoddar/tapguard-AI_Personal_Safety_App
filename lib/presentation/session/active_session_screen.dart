@@ -282,21 +282,33 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
         } else {
           _countdownTimer?.cancel();
           _timerRunning = false;
-          _onTimerEnd();
+          unawaited(_onTimerEnd());
         }
       });
     });
   }
 
   // ── Timer ended — vibrate + push notification + local alert ──────────────
-  void _onTimerEnd() {
+  Future<void> _onTimerEnd() async {
     HapticFeedback.heavyImpact();
 
     // 1. Vibrate urgently on THIS device
     _notifService.vibrateTimerEnd();
 
-    // 2. Send push notification to all active contacts via OneSignal
+    // 2. Write timerEnded: true on the session doc so the
+    //    `onTimerEnded` Cloud Function in functions/index.js fires
+    //    and pushes alerts to all active contacts. Without this
+    //    write the trigger never runs.
     if (_session != null) {
+      try {
+        await _db.collection('sessions').doc(_session!.sessionId).update({
+          'timerEnded': true,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      } catch (_) {}
+
+      // 3. Client-side OneSignal push (kept for redundancy while
+      //    the Cloud Function is also wired up).
       _notifService.alertContactsTimerEnded(
         ownerUid: _session!.ownerUid,
         ownerName: _session!.ownerName,
@@ -304,7 +316,8 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
       );
     }
 
-    // 3. Show dialog on screen
+    // 4. Show dialog on screen
+    if (!mounted) return;
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -559,17 +572,22 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
                           ),
                         ),
                         const SizedBox(width: 8),
-                        Text(
-                          isConnected
-                              ? 'Connected to $contactName'
-                              : 'Waiting for connection…',
-                          style: TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: isConnected
-                                ? AppColors.success
-                                : AppColors.primary,
+                        Flexible(
+                          child: Text(
+                            isConnected
+                                ? 'Connected to $contactName'
+                                : 'Waiting for connection…',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            softWrap: false,
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: isConnected
+                                  ? AppColors.success
+                                  : AppColors.primary,
+                            ),
                           ),
                         ),
                       ],
@@ -581,8 +599,10 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
                   const SizedBox(height: 20),
 
                   // Live badge + Change timer
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 10,
+                    runSpacing: 8,
                     children: [
                       Container(
                         padding: const EdgeInsets.symmetric(
@@ -595,6 +615,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
                           border: Border.all(color: Colors.grey.shade200),
                         ),
                         child: Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
                               Icons.crop_square_rounded,
@@ -615,7 +636,6 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
                           ],
                         ),
                       ),
-                      const SizedBox(width: 10),
                       GestureDetector(
                         onTap: _showTimerPicker,
                         child: Container(
@@ -631,6 +651,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
                             ),
                           ),
                           child: Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: const [
                               Icon(
                                 Icons.timer_rounded,
@@ -698,30 +719,36 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  _isSafe ? '✓ You are Safe!' : 'I am Safe',
-                                  style: const TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w800,
-                                    color: Colors.white,
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _isSafe ? '✓ You are Safe!' : 'I am Safe',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.white,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(height: 3),
-                                Text(
-                                  _isSafe
-                                      ? 'Contact notified • Timer reset'
-                                      : 'Confirms status & resets timer',
-                                  style: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontSize: 12,
-                                    color: Colors.white.withValues(alpha:0.85),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    _isSafe
+                                        ? 'Contact notified • Timer reset'
+                                        : 'Confirms status & resets timer',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 12,
+                                      color: Colors.white.withValues(alpha:0.85),
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                             Container(
                               width: 50,
@@ -770,27 +797,33 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'End Session',
-                                style: TextStyle(
-                                  fontFamily: 'Poppins',
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w700,
-                                  color: Color(0xFF1A1A2E),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'End Session',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF1A1A2E),
+                                  ),
                                 ),
-                              ),
-                              Text(
-                                'Stop sharing your location',
-                                style: TextStyle(
-                                  fontFamily: 'Poppins',
-                                  fontSize: 12,
-                                  color: Colors.grey.shade400,
+                                Text(
+                                  'Stop sharing your location',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: 12,
+                                    color: Colors.grey.shade400,
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                           _isEnding
                               ? const SizedBox(
@@ -830,12 +863,16 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
                         color: Colors.grey.shade400,
                       ),
                       const SizedBox(width: 6),
-                      Text(
-                        'Your location is encrypted & visible only to your contact.',
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 11,
-                          color: Colors.grey.shade400,
+                      Expanded(
+                        child: Text(
+                          'Your location is encrypted & visible only to your contact.',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 11,
+                            color: Colors.grey.shade400,
+                          ),
                         ),
                       ),
                     ],
