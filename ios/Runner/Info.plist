@@ -45,5 +45,9 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>TapGuard listens for a safety keyword (e.g. "help", "stop", "danger") to detect emergencies. Audio is processed on-device only and never stored or uploaded.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Used only to detect safety keywords on-device. No audio leaves your phone.</string>
 </dict>
 </plist>
