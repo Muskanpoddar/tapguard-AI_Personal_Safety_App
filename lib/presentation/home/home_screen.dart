@@ -3,57 +3,24 @@
 // REAL-TIME features:
 //  1. SYSTEM READY badge — checks Location + NFC permissions live
 //  2. NFC availability   — polls NfcManager.instance.checkAvailability()
-//  3. Trusted Contacts   — Firestore stream on users/{uid}/contacts
-//                          each contact has lastSeen timestamp + isActive flag
+//  3. Trusted Contacts   — `userContactsProvider` (Riverpod) on
+//                          users/{uid}/contacts, same source as Profile.
 //  4. Contact status     — updates every time Firestore doc changes
 
 import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:nfc_manager/nfc_manager.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/utils/contact_extensions.dart';
 import '../../core/routes/app_routes.dart';
-
-// ── Contact model (local, from Firestore) ─────────────────────────────────
-class _Contact {
-  final String uid;
-  final String name;
-  final bool isActive;
-  final DateTime? lastSeen;
-
-  _Contact({
-    required this.uid,
-    required this.name,
-    required this.isActive,
-    this.lastSeen,
-  });
-
-  factory _Contact.fromDoc(DocumentSnapshot doc) {
-    final d = doc.data() as Map<String, dynamic>;
-    final ts = d['lastSeen'] as Timestamp?;
-    return _Contact(
-      uid: doc.id,
-      name: d['name'] ?? 'Unknown',
-      isActive: d['isActive'] ?? false,
-      lastSeen: ts?.toDate(),
-    );
-  }
-
-  // Human-readable last seen string
-  String get statusLabel {
-    if (isActive) return 'Active Now';
-    if (lastSeen == null) return 'Never seen';
-    final diff = DateTime.now().difference(lastSeen!);
-    if (diff.inSeconds < 60) return 'Just now';
-    if (diff.inMinutes < 60) return 'Last seen: ${diff.inMinutes} min ago';
-    if (diff.inHours < 24) return 'Last seen: ${diff.inHours}h ago';
-    return 'Last seen: ${diff.inDays}d ago';
-  }
-}
+import '../../data/models/contact_model.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/profile_provider.dart';
+import '../../providers/session_provider.dart';
 
 // ── System status model ────────────────────────────────────────────────────
 class _SystemStatus {
@@ -85,23 +52,18 @@ class _SystemStatus {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen>
+class _HomeScreenState extends ConsumerState<HomeScreen>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
 
   // ── System status ─────────────────────────────────────────────────────────
   _SystemStatus _status = const _SystemStatus();
   Timer? _statusTimer;
-
-  // ── Contacts ──────────────────────────────────────────────────────────────
-  List<_Contact> _contacts = [];
-  StreamSubscription? _contactsSub;
-  bool _contactsLoading = true;
 
   // ── Enter animation ───────────────────────────────────────────────────────
   late AnimationController _fadeCtrl;
@@ -129,7 +91,6 @@ class _HomeScreenState extends State<HomeScreen>
     ).drive(Tween(begin: 0.0, end: 1.0));
 
     _checkSystemStatus();
-    _listenContacts();
 
     // Re-check status every 5 seconds (NFC can be toggled anytime)
     _statusTimer = Timer.periodic(
@@ -150,7 +111,6 @@ class _HomeScreenState extends State<HomeScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _statusTimer?.cancel();
-    _contactsSub?.cancel();
     _fadeCtrl.dispose();
     super.dispose();
   }
@@ -249,45 +209,16 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  // ── Firestore live contacts stream ────────────────────────────────────────
-  // Firestore structure:
-  //   users/{ownerUid}/contacts/{contactUid}
-  //     name:     string
-  //     phone:    string
-  //     isActive: bool       ← true if they have an active session right now
-  //     lastSeen: timestamp  ← last time they were seen in a session
-  //     isPaired: bool       ← NFC paired = true
-  void _listenContacts() {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) {
-      setState(() => _contactsLoading = false);
-      return;
-    }
-
-    _contactsSub = FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .collection('contacts')
-        .orderBy('isActive', descending: true)
-        .snapshots()
-        .listen(
-          (snap) {
-            if (!mounted) return;
-            setState(() {
-              _contacts = snap.docs.map((d) => _Contact.fromDoc(d)).toList();
-              _contactsLoading = false;
-            });
-          },
-          onError: (_) {
-            if (!mounted) return;
-            setState(() => _contactsLoading = false);
-          },
-        );
-  }
-
   // ══════════════════════════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
+    // Watch the shared contacts stream. Same source as Profile screen,
+    // so any change there reflects here immediately.
+    final uid = ref.watch(currentUidProvider);
+    final AsyncValue<List<ContactModel>> contactsAsync = uid.isEmpty
+        ? const AsyncValue<List<ContactModel>>.data(<ContactModel>[])
+        : ref.watch(userContactsProvider(uid));
+
     return Scaffold(
       backgroundColor: const Color(0xFFF4F3F8),
       body: FadeTransition(
@@ -299,6 +230,7 @@ class _HomeScreenState extends State<HomeScreen>
                 physics: const BouncingScrollPhysics(),
                 slivers: [
                   SliverToBoxAdapter(child: _topBar()),
+                  SliverToBoxAdapter(child: _sharedSessionBanner()),
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -314,38 +246,142 @@ class _HomeScreenState extends State<HomeScreen>
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(16, 20, 16, 10),
-                      child: _contactsHeader(),
+                      child: _contactsHeader(contactsAsync),
                     ),
                   ),
                   // Contacts list
-                  if (_contactsLoading)
-                    const SliverToBoxAdapter(
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(vertical: 24),
-                        child: Center(
-                          child: CircularProgressIndicator(
-                            color: AppColors.primary,
-                            strokeWidth: 2.5,
-                          ),
-                        ),
-                      ),
-                    )
-                  else if (_contacts.isEmpty)
-                    SliverToBoxAdapter(child: _emptyContacts())
-                  else
-                    SliverList(
-                      delegate: SliverChildBuilderDelegate(
-                        (_, i) => Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                          child: _contactTile(_contacts[i]),
-                        ),
-                        childCount: _contacts.length,
-                      ),
-                    ),
-
+                  ..._contactsSlivers(contactsAsync),
                   SliverToBoxAdapter(child: _encBadge()),
                   const SliverToBoxAdapter(child: SizedBox(height: 20)),
                 ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Contacts slivers (loading / empty / data) ────────────────────────────
+  List<Widget> _contactsSlivers(AsyncValue<List<ContactModel>> contactsAsync) {
+    return contactsAsync.when(
+      loading: () => const [
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Center(
+              child: CircularProgressIndicator(
+                color: AppColors.primary,
+                strokeWidth: 2.5,
+              ),
+            ),
+          ),
+        ),
+      ],
+      error: (_, _) => [
+        SliverToBoxAdapter(child: _emptyContacts()),
+      ],
+      data: (contacts) {
+        if (contacts.isEmpty) {
+          return [SliverToBoxAdapter(child: _emptyContacts())];
+        }
+        return [
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (_, i) => Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: _contactTile(contacts[i]),
+              ),
+              childCount: contacts.length,
+            ),
+          ),
+        ];
+      },
+    );
+  }
+
+  // ── "Someone shared a session with you" banner ───────────────────────────
+  // Shows when this user is the receiver of an active shared session
+  // (someone tapped "Share Live Location" from their contacts). Tap to
+  // open the live session — the screen auto-detects the receiver role
+  // and starts streaming this phone's GPS back.
+  Widget _sharedSessionBanner() {
+    final async = ref.watch(sharedSessionsProvider);
+    final sessions = async.maybeWhen(
+      data: (list) => list,
+      orElse: () => const <SharedSession>[],
+    );
+    if (sessions.isEmpty) return const SizedBox.shrink();
+    final s = sessions.first;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: GestureDetector(
+        onTap: () {
+          HapticFeedback.mediumImpact();
+          Navigator.of(context).pushNamed(AppRoutes.liveSession);
+        },
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.primary.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: AppColors.primary.withValues(alpha: 0.35),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withValues(alpha: 0.12),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.location_on_rounded,
+                  color: Colors.white,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${s.ownerName} shared live location',
+                      style: const TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF1A1A2E),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Tap to view — you can share your location back',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 11,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: AppColors.primary,
+                size: 22,
               ),
             ],
           ),
@@ -633,19 +669,26 @@ class _HomeScreenState extends State<HomeScreen>
           const SizedBox(height: 12),
           Text(
             title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               fontFamily: 'Poppins',
               fontSize: 14,
               fontWeight: FontWeight.w700,
               color: Color(0xFF1A1A2E),
+              height: 1.2,
             ),
           ),
+          const SizedBox(height: 2),
           Text(
             sub,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontFamily: 'Poppins',
               fontSize: 12,
               color: Colors.grey.shade400,
+              height: 1.2,
             ),
           ),
         ],
@@ -654,7 +697,12 @@ class _HomeScreenState extends State<HomeScreen>
   );
 
   // ── Contacts header ───────────────────────────────────────────────────────
-  Widget _contactsHeader() => Row(
+  Widget _contactsHeader(AsyncValue<List<ContactModel>> contactsAsync) {
+    final count = contactsAsync.maybeWhen(
+      data: (list) => list.length,
+      orElse: () => 0,
+    );
+    return Row(
     mainAxisAlignment: MainAxisAlignment.spaceBetween,
     children: [
       Row(
@@ -668,7 +716,7 @@ class _HomeScreenState extends State<HomeScreen>
               color: Color(0xFF1A1A2E),
             ),
           ),
-          if (_contacts.isNotEmpty) ...[
+          if (count > 0) ...[
             const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -677,7 +725,7 @@ class _HomeScreenState extends State<HomeScreen>
                 borderRadius: BorderRadius.circular(50),
               ),
               child: Text(
-                '${_contacts.length}',
+                '$count',
                 style: const TextStyle(
                   fontFamily: 'Poppins',
                   fontSize: 11,
@@ -690,7 +738,7 @@ class _HomeScreenState extends State<HomeScreen>
         ],
       ),
       GestureDetector(
-        onTap: () => Navigator.of(context).pushNamed(AppRoutes.profile),
+        onTap: () => Navigator.of(context).pushNamed(AppRoutes.contacts),
         child: Text(
           'See All',
           style: TextStyle(
@@ -703,6 +751,7 @@ class _HomeScreenState extends State<HomeScreen>
       ),
     ],
   );
+  }
 
   // ── Empty state ───────────────────────────────────────────────────────────
   Widget _emptyContacts() => Padding(
@@ -772,7 +821,13 @@ class _HomeScreenState extends State<HomeScreen>
   );
 
   // ── Live contact tile ─────────────────────────────────────────────────────
-  Widget _contactTile(_Contact c) => Container(
+  Widget _contactTile(ContactModel c) => InkWell(
+    onTap: () => Navigator.of(context).pushNamed(
+      AppRoutes.contactDetail,
+      arguments: {'contactUid': c.uid},
+    ),
+    borderRadius: BorderRadius.circular(14),
+    child: Container(
     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
     decoration: BoxDecoration(
       color: Colors.white,
@@ -793,7 +848,7 @@ class _HomeScreenState extends State<HomeScreen>
               radius: 22,
               backgroundColor: AppColors.primary.withValues(alpha: 0.12),
               child: Text(
-                c.name[0].toUpperCase(),
+                c.name.isEmpty ? '?' : c.name[0].toUpperCase(),
                 style: const TextStyle(
                   fontFamily: 'Poppins',
                   fontSize: 16,
@@ -823,15 +878,56 @@ class _HomeScreenState extends State<HomeScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                c.name,
-                style: const TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF1A1A2E),
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      c.name,
+                      style: const TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF1A1A2E),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (c.priority > 0 && c.priority <= 3)
+                    Container(
+                      margin: const EdgeInsets.only(left: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: priorityColor(c.priority)
+                            .withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        'P${c.priority}',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                          color: priorityColor(c.priority),
+                        ),
+                      ),
+                    ),
+                ],
               ),
+              if (c.email.isNotEmpty)
+                Text(
+                  c.email,
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 11,
+                    color: Colors.grey.shade500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               const SizedBox(height: 2),
               Row(
                 children: [
@@ -845,17 +941,21 @@ class _HomeScreenState extends State<HomeScreen>
                         shape: BoxShape.circle,
                       ),
                     ),
-                  Text(
-                    c.statusLabel,
-                    style: TextStyle(
-                      fontFamily: 'Poppins',
-                      fontSize: 12,
-                      color: c.isActive
-                          ? AppColors.success
-                          : Colors.grey.shade400,
-                      fontWeight: c.isActive
-                          ? FontWeight.w600
-                          : FontWeight.w400,
+                  Flexible(
+                    child: Text(
+                      c.statusLabel,
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 12,
+                        color: c.isActive
+                            ? AppColors.success
+                            : Colors.grey.shade400,
+                        fontWeight: c.isActive
+                            ? FontWeight.w600
+                            : FontWeight.w400,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
@@ -865,6 +965,7 @@ class _HomeScreenState extends State<HomeScreen>
         ),
         Icon(Icons.more_horiz_rounded, color: Colors.grey.shade300, size: 22),
       ],
+    ),
     ),
   );
 
@@ -940,6 +1041,7 @@ class _PairingOptionCard extends StatelessWidget {
             // ── Icon + badge row ─────────────────────────────────────────────
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Container(
                   width: 40,
@@ -956,23 +1058,39 @@ class _PairingOptionCard extends StatelessWidget {
                     size: 22,
                   ),
                 ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: isEnabled
-                        ? badgeColor.withValues(alpha: 0.12)
-                        : Colors.grey.shade200,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    isEnabled ? badgeText : 'OFF',
-                    style: TextStyle(
-                      fontFamily: 'Poppins',
-                      fontSize: 8,
-                      fontWeight: FontWeight.w800,
-                      color: isEnabled ? badgeColor : Colors.grey.shade400,
-                      letterSpacing: 0.5,
+                // Flexible + FittedBox lets the badge keep its intrinsic
+                // width on wide screens, but scale down (without clipping)
+                // when the card is too narrow — fixes "RIGHT OVERFLOWED BY
+                // 3.4 PIXELS" on small phones.
+                Flexible(
+                  fit: FlexFit.loose,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isEnabled
+                            ? badgeColor.withValues(alpha: 0.12)
+                            : Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        isEnabled ? badgeText : 'OFF',
+                        maxLines: 1,
+                        softWrap: false,
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 8,
+                          fontWeight: FontWeight.w800,
+                          color:
+                              isEnabled ? badgeColor : Colors.grey.shade400,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
                     ),
                   ),
                 ),

@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/routes/app_routes.dart';
+import '../contacts/contacts_screen.dart';
 import '../home/home_screen.dart';
-import '../map/live_map_screen.dart';
 import '../profile/profile_screen.dart';
 
 class MainScreen extends StatefulWidget {
@@ -18,7 +18,7 @@ class _MainScreenState extends State<MainScreen> {
 
   static const _tabs = [
     {'icon': Icons.home_rounded, 'label': 'Home'},
-    {'icon': Icons.map_rounded, 'label': 'Map'},
+    {'icon': Icons.people_alt_rounded, 'label': 'Contacts'},
     {'icon': Icons.sos_rounded, 'label': 'SOS'},
     {'icon': Icons.person_rounded, 'label': 'Profile'},
   ];
@@ -31,7 +31,7 @@ class _MainScreenState extends State<MainScreen> {
         index: _currentIndex,
         children: [
           const HomeScreen(),
-          const LiveMapScreen(),
+          const ContactsScreen(),
           const _SosPlaceholder(),
           const ProfileScreen(),
         ],
@@ -52,35 +52,42 @@ class _MainScreenState extends State<MainScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: List.generate(_tabs.length, (i) {
             final sel = i == _currentIndex;
-            return GestureDetector(
-              onTap: () {
-                HapticFeedback.lightImpact();
-                if (i == 2) {
-                  Navigator.of(context).pushNamed(AppRoutes.sos);
-                  return;
-                }
-                if (i == _currentIndex) return;
-                setState(() => _currentIndex = i);
-              },
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    _tabs[i]['icon'] as IconData,
-                    color: sel ? AppColors.primary : Colors.grey.shade400,
-                    size: 24,
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    _tabs[i]['label'] as String,
-                    style: TextStyle(
-                      fontFamily: 'Poppins',
-                      fontSize: 11,
-                      fontWeight: sel ? FontWeight.w600 : FontWeight.w400,
+            return Expanded(
+              child: GestureDetector(
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  if (i == 2) {
+                    Navigator.of(context).pushNamed(AppRoutes.sos);
+                    return;
+                  }
+                  if (i == _currentIndex) return;
+                  setState(() => _currentIndex = i);
+                },
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      _tabs[i]['icon'] as IconData,
                       color: sel ? AppColors.primary : Colors.grey.shade400,
+                      size: 24,
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 3),
+                    Flexible(
+                      child: Text(
+                        _tabs[i]['label'] as String,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        softWrap: false,
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 11,
+                          fontWeight: sel ? FontWeight.w600 : FontWeight.w400,
+                          color: sel ? AppColors.primary : Colors.grey.shade400,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             );
           }),
