@@ -375,20 +375,25 @@ class _GeofenceSetupScreenState extends State<GeofenceSetupScreen>
                         ],
                       ),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: AppColors.success.withValues(alpha: 0.10),
-                        borderRadius: BorderRadius.circular(50),
-                      ),
-                      child: Text(
-                        '${_radiusM.toInt()}m',
-                        style: const TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.success,
+                    Flexible(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.success.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(50),
+                        ),
+                        child: Text(
+                          '${_radiusM.toInt()}m',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          softWrap: false,
+                          style: const TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.success,
+                          ),
                         ),
                       ),
                     ),
@@ -451,14 +456,18 @@ class _GeofenceSetupScreenState extends State<GeofenceSetupScreen>
                     Icon(Icons.lock_outline_rounded,
                         size: 12, color: Colors.grey.shade400),
                     const SizedBox(width: 6),
-                    Text(
-                      'END-TO-END ENCRYPTED LOCATION DATA',
-                      style: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey.shade400,
-                        letterSpacing: 0.8,
+                    Expanded(
+                      child: Text(
+                        'END-TO-END ENCRYPTED LOCATION DATA',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade400,
+                          letterSpacing: 0.8,
+                        ),
                       ),
                     ),
                   ],
@@ -475,12 +484,16 @@ class _GeofenceSetupScreenState extends State<GeofenceSetupScreen>
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontFamily: 'Poppins',
-            fontSize: 13,
-            color: Color(0xFF1A1A2E),
+        Expanded(
+          child: Text(
+            label,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 13,
+              color: Color(0xFF1A1A2E),
+            ),
           ),
         ),
         Switch(
