@@ -43,3 +43,27 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# ─── Secrets / credentials ──────────────────────────────────────────────────
+# Never commit runtime secrets. See docs/SECURITY.md for the full
+# rotation + history-scrub runbook.
+#
+# Local env file (loaded at runtime via flutter_dotenv)
+.env
+.env.local
+.env.*.local
+
+# Template is committed (no real values)
+!.env.example
+
+# Firebase Admin SDK service account — full project admin access.
+# Each developer must drop a copy of this file from their secure
+# credentials store. functions/index.js loads it via `require`.
+functions/service-account.json
+
+# Firebase Android config — contains the Android API key. The Gradle
+# plugin reads it from disk, so the file can live outside the repo.
+android/app/google-services.json
+
+# Build artefact that has been known to leak merged keys
+/lib/firebase_options.dart.bak

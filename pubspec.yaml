@@ -32,6 +32,9 @@ dependencies:
   qr_flutter: ^4.1.0
   # Direct SMS dispatch for SOS alerts (replaces the broken `sms:` URI).
   telephony: ^0.2.0
+  # Deep-link handling so the SMS shareUrl opens the app if installed
+  # instead of falling back to the browser web page.
+  app_links: ^6.3.2
   # AI risk detection (Phase 1)
   tflite_flutter: ^0.11.0
   # Pinned to 5.1.2 because 5.2.0+ requires record_platform_interface
@@ -45,6 +48,9 @@ dependencies:
   hive: ^2.2.3
   hive_flutter: ^1.1.0
   sensors_plus: ^6.1.2
+  # Load secrets from .env at runtime so SMTP / OneSignal / Firebase
+  # keys never get committed. See docs/SECURITY.md.
+  flutter_dotenv: ^5.2.1
 
 dev_dependencies:
   flutter_test:
@@ -65,3 +71,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/models/
+    # .env is bundled into the app so flutter_dotenv can read it at
+    # runtime. The file itself is gitignored (see .gitignore). Use
+    # .env.example as the committed template.
+    - .env

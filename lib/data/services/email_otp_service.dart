@@ -2,22 +2,40 @@
 //
 // Email OTP Service – uses Maileroo SMTP (port 587 / STARTTLS).
 // dart:io raw sockets work on Android & iOS; only Flutter Web blocks them.
+//
+// SMTP credentials are read from the .env file at runtime (loaded by
+// main.dart via flutter_dotenv) so they never sit in source control.
+// See docs/SECURITY.md for the rotation runbook.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:mailer/mailer.dart';
 import 'package:mailer/smtp_server.dart';
 
 class EmailOtpService {
-  // ─── SMTP CONFIGURATION ───────────────────────────────────────────────────
-  static const String _smtpHost = 'smtp.maileroo.com';
-  static const int _smtpPort = 587;
-  static const String _smtpUsername = 'no-reply@lekhapatra.shop';
-  static const String _smtpPassword = 'e45789741666e7db47a24bf8';
+  // ─── SMTP CONFIGURATION (loaded from .env at runtime) ─────────────────────
+  // Throws a clear error at first send if the .env file is missing a
+  // required key, instead of silently using a stale hard-coded value.
+  static String get _smtpHost =>
+      dotenv.maybeGet('SMTP_HOST') ?? _missing('SMTP_HOST');
+  static int get _smtpPort =>
+      int.tryParse(dotenv.maybeGet('SMTP_PORT') ?? '') ?? 587;
+  static String get _smtpUsername =>
+      dotenv.maybeGet('SMTP_USERNAME') ?? _missing('SMTP_USERNAME');
+  static String get _smtpPassword =>
+      dotenv.maybeGet('SMTP_PASSWORD') ?? _missing('SMTP_PASSWORD');
+  static String get _senderEmail =>
+      dotenv.maybeGet('SENDER_EMAIL') ?? _smtpUsername;
+  static String get _senderName =>
+      dotenv.maybeGet('SENDER_NAME') ?? 'TapGuard';
 
-  static const String _senderEmail = _smtpUsername;
-  static const String _senderName = 'TapGuard';
+  static String _missing(String key) {
+    throw StateError(
+      'EmailOtpService: missing "$key" in .env — see docs/SECURITY.md',
+    );
+  }
 
   // ─── In-memory OTP store: email → (otp, expiry) ───────────────────────────
   static final Map<String, _OtpEntry> _store = {};
